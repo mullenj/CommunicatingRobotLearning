@@ -1,2 +1,1 @@
-# CommunicatingRobotLearning
-Github Repository for any code required for the haptic and augmented reality devices on the Communicating Robot Learning senior design project.
+This README file is for the Multi-modal Communication of Robot Learning senior design project at Virginia Tech.
