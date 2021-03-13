@@ -24,11 +24,11 @@ import signal
 
 
 # hard coded three goal positions
-goal1 = np.asarray([0.5, -0.5, 0.2])
-goal2 = np.asarray([0.5, +0.5, 0.2])
-goal3 = np.asarray([0.7, +0.0, 0.2])
+goal1 = np.asarray([0.63, -0.0525, 0.12])
+goal2 = np.asarray([0.55, 0.37, 0.077])
+goal3 = np.asarray([0.08, 0.4, 0.1])
 goals = [goal1, goal2, goal3]
-sendfreq = timedelta(seconds=0.25)
+sendfreq = timedelta(seconds=0.1)
 
 
 
@@ -127,17 +127,26 @@ def joint2pose(q):
     return H[:,3][:3]
 
 def send2hololens(goals, belief, xyz_curr, initialized):
-    print(belief)
+    #print(belief)
+    #print(xyz_curr)
     if initialized:
         with open('robotUpdate.txt', 'w') as f:
             f.write(f"{xyz_curr[0]}\t{xyz_curr[1]}\t{xyz_curr[2]}\n")
-            for obj in zip(goals, belief):
-                f.write(f"{obj[0][0]}\t{obj[0][1]}\t{obj[0][2]}\t{obj[1]}\n")
+            for count, obj in enumerate(zip(goals, belief)):
+                if count < len(belief) - 1:
+                    f.write(f"{obj[1]}\n")
+                else:
+                    f.write(f"{obj[1]}")
+
+
     else:
         with open('robotInit.txt', 'w') as f:
-            f.write(f"{xyz_curr[0]}\t{xyz_curr[1]}\t{xyz_curr[2]}\n")
-            for obj in zip(goals, belief):
-                f.write(f"{obj[0][0]}\t{obj[0][1]}\t{obj[0][2]}\t{obj[1]}\n")
+            f.write(f"{xyz_curr[0]}\t{xyz_curr[1]}\t{xyz_curr[2]}\tCurrent Location\n")
+            for count, obj in enumerate(zip(goals, belief)):
+                if count < len(belief) - 1:
+                    f.write(f"{obj[0][0]}\t{obj[0][1]}\t{obj[0][2]}\tGoal {count + 1}\t{obj[1]}\n")
+                else:
+                    f.write(f"{obj[0][0]}\t{obj[0][1]}\t{obj[0][2]}\tGoal {count}\t{obj[1]}")
 
 
 def main():
@@ -155,7 +164,7 @@ def main():
     # joint2pose -> forward kinematics: convert the joint position to the xyz position of the end-effector
     xyz_home = joint2pose(state["q"])
     belief = np.asarray([0.33, 0.33, 0.33])
-    BETA = 2.5
+    BETA = 8
 
     print('[*] Ready for a teleoperation...')
 
@@ -206,15 +215,17 @@ def main():
         action_difference = np.abs(xdot_g1 - xdot_g2) # WHAT TO DO HERE??? not used elsewhere
 
         # human inputs converted to dx, dy, dz velocities in the end-effector space
-        #TODO: Improve this
         xdot = [0]*6
-        if max(belief) < 0.6:
+        # xdot[0] = action_scale * z[0]
+        # xdot[1] = action_scale * -z[1]
+        # xdot[2] = action_scale * -z[2]
+        if max(belief) < 0.45:
             xdot[0] = action_scale * z[0]
             xdot[1] = action_scale * -z[1]
             xdot[2] = action_scale * -z[2]
-        elif max(belief) < 0.9:
+        elif max(belief) < 0.8:
             which_goal = np.argmax(belief)
-            scalar = (max(belief)-0.6)/0.3
+            scalar = (max(belief)-0.45)/(0.35*action_scale)
             xdot[0] = action_scale * (z[0] + xdot_g_all[which_goal][0]*scalar)
             xdot[1] = action_scale * (-z[1] + xdot_g_all[which_goal][1]*scalar)
             xdot[2] = action_scale * (-z[2] + xdot_g_all[which_goal][2]*scalar)
@@ -225,7 +236,7 @@ def main():
             xdot[2] = xdot_g_all[which_goal][2]
 
         if (datetime.now() - lastsend) > sendfreq:
-            print("[*] Sending Updated Coordinates and Beliefs")
+            #print("[*] Sending Updated Coordinates and Beliefs")
             send2hololens(goals, belief, xyz_curr, True)
             lastsend = datetime.now()
 
