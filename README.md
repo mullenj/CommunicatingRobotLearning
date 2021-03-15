@@ -21,11 +21,13 @@ teleop_task1.py functionality:
 * Four goals, two high and two low, two sideways, and two upright
 * Favoring tilted end goal (might want better implementation)
 * Parameter tuning (might want to lower beta? only requires one really good correction to favor straight and the assistance helps a lot)
+
 To be implemented
 * Haptics
 
 teleop_task2.py will be set up to run the second task of the user study. This task will involve the same scenario as the first but with an obstacle in the way of the robots motion. The robot now needs to learn that it has to avoid this obstacle.
 teleop_task2.py functionality:
+
 To be implemented
 * Discrete trajectories
 * Learning?
