@@ -16,6 +16,7 @@ To connect to the haptic device, the procedure is as follows:
 3. z
 
 teleop_task1.py is set up to run the first task of the user study. This task will be the simplest of the three. It begins with a cup in the robots grasper mechanism and operates similarly to the above example. As the person gets closer to a goal location the robot will begin assisting. We want the robot to begin tilting the cup to feign ignorance, from which the human needs to correct the rotation to make the robot select the correct goal.
+
 teleop_task1.py functionality:
 * Simplified calculations using list comprehensions
 * Four goals, two high and two low, two sideways, and two upright
@@ -26,6 +27,7 @@ To be implemented
 * Haptics
 
 teleop_task2.py will be set up to run the second task of the user study. This task will involve the same scenario as the first but with an obstacle in the way of the robots motion. The robot now needs to learn that it has to avoid this obstacle.
+
 teleop_task2.py functionality:
 
 To be implemented
