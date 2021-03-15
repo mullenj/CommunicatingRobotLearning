@@ -165,6 +165,7 @@ def main():
     state = readState(conn)
     # joint2pose -> forward kinematics: convert the joint position to the xyz position of the end-effector
     xyz_home = joint2pose(state["q"])
+    print(xyz_home)
     belief = np.asarray([0.33, 0.33, 0.33])
     BETA = 8
 

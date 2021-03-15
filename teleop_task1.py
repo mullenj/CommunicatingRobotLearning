@@ -1,6 +1,7 @@
 import socket
 import time
 import numpy as np
+import math
 import pickle
 import pygame
 import sys
@@ -8,6 +9,8 @@ import os
 from datetime import datetime, timedelta
 import subprocess
 import signal
+from return_home import return_home
+np.set_printoptions(suppress=True)
 
 """
  * a minimal script for teleoperating the robot using a joystick
@@ -21,13 +24,15 @@ import signal
     navigate to ~/libfranka/build
     run ./collab/velocity_control
 """
-
-
 # hard coded three goal positions
-goal1 = np.asarray([0.63, -0.0525, 0.12])
-goal2 = np.asarray([0.55, 0.37, 0.077])
-goal3 = np.asarray([0.08, 0.4, 0.1])
-goals = [goal1, goal2, goal3]
+# goal1 = np.asarray([0.627, -0.459, 0.629]) # Top Shelf
+# goal2 = np.asarray([0.634, -0.457, 0.318]) # Bottom Shelf
+# goals = [goal1, goal2]
+goal1 = np.asarray([0.627, -0.459, 0.629, 1.59, 0.766, 0.058]) # Top Shelf flat
+goal2 = np.asarray([0.634, -0.457, 0.318, 1.59, 0.766, 0.058]) # Bottom Shelf flat
+goal3 = np.asarray([0.627, -0.459, 0.629, 1.59, -0.795, 0.027]) # Top Shelf sideways
+goal4 = np.asarray([0.634, -0.457, 0.318, 1.59, -0.795, 0.027]) # Bottom Shelf sideways
+goals = [goal1, goal2, goal3, goal4]
 sendfreq = timedelta(seconds=0.1)
 
 
@@ -124,31 +129,62 @@ def joint2pose(q):
     H7 = np.dot(TransX(np.pi/2, 0.088, 0, 0), RotZ(q[6]))
     H_panda_hand = TransZ(-np.pi/4, 0, 0, 0.2105)
     H = np.linalg.multi_dot([H1, H2, H3, H4, H5, H6, H7, H_panda_hand])
-    #print(H)
-    #print(H[:,3][:3])
-    return H[:,3][:3]
+    H_no_hand = np.linalg.multi_dot([H1, H2, H3, H4, H5, H6, H7])
+    return np.concatenate((H[:,3][:3], rotationMatrixToEulerAngles(H_no_hand[:3,:3])), axis = None)
 
-def send2hololens(goals, belief, xyz_curr, initialized):
+# Checks if a matrix is a valid rotation matrix.
+def isRotationMatrix(R) :
+    Rt = np.transpose(R)
+    shouldBeIdentity = np.dot(Rt, R)
+    I = np.identity(3, dtype = R.dtype)
+    n = np.linalg.norm(I - shouldBeIdentity)
+    return n < 1e-6
+
+
+# Calculates rotation matrix to euler angles
+# The result is the same as MATLAB except the order
+# of the euler angles ( x and z are swapped ).
+def rotationMatrixToEulerAngles(R) :
+
+    assert(isRotationMatrix(R))
+
+    sy = math.sqrt(R[0,0] * R[0,0] +  R[1,0] * R[1,0])
+
+    singular = sy < 1e-6
+
+    if  not singular :
+        x = math.atan2(R[2,1] , R[2,2])
+        y = math.atan2(-R[2,0], sy)
+        z = math.atan2(R[1,0], R[0,0])
+    else :
+        x = math.atan2(-R[1,2], R[1,1])
+        y = math.atan2(-R[2,0], sy)
+        z = 0
+
+    return np.array([x, y, z])
+
+
+def send2hololens(goals, belief, coord_curr, initialized):
     #print(belief)
     #print(xyz_curr)
     if initialized:
         with open('robotUpdate.txt', 'w') as f:
-            f.write(f"{xyz_curr[0]}\t{xyz_curr[1]}\t{xyz_curr[2]}\n")
-            for count, obj in enumerate(zip(goals, belief)):
+            f.write(f"{coord_curr[0]}\t{coord_curr[1]}\t{coord_curr[2]}\t{coord_curr[3]}\t{coord_curr[4]}\t{coord_curr[5]}\n")
+            for count, (goal, belief_x) in enumerate(zip(goals, belief)):
                 if count < len(belief) - 1:
-                    f.write(f"{obj[1]}\n")
+                    f.write(f"{belief_x}\n")
                 else:
-                    f.write(f"{obj[1]}")
+                    f.write(f"{belief_x}")
 
 
     else:
         with open('robotInit.txt', 'w') as f:
-            f.write(f"{xyz_curr[0]}\t{xyz_curr[1]}\t{xyz_curr[2]}\tCurrent Location\n")
-            for count, obj in enumerate(zip(goals, belief)):
+            f.write(f"{coord_curr[0]}\t{coord_curr[1]}\t{coord_curr[2]}\t{coord_curr[3]}\t{coord_curr[4]}\t{coord_curr[5]}\tCurrent Location\n")
+            for count, (goal, belief_x) in enumerate(zip(goals, belief)):
                 if count < len(belief) - 1:
-                    f.write(f"{obj[0][0]}\t{obj[0][1]}\t{obj[0][2]}\tGoal {count + 1}\t{obj[1]}\n")
+                    f.write(f"{goal[0]}\t{goal[1]}\t{goal[2]}\t{goal[3]}\t{goal[4]}\t{goal[5]}\tGoal {count + 1}\t{belief_x}\n")
                 else:
-                    f.write(f"{obj[0][0]}\t{obj[0][1]}\t{obj[0][2]}\tGoal {count}\t{obj[1]}")
+                    f.write(f"{goal[0]}\t{goal[1]}\t{goal[2]}\t{goal[3]}\t{goal[4]}\t{goal[5]}\tGoal {count + 1}\t{belief_x}")
 
 
 def main():
@@ -164,82 +200,93 @@ def main():
     # readState -> give you a dictionary with things like joint values, velocity, torque
     state = readState(conn)
     # joint2pose -> forward kinematics: convert the joint position to the xyz position of the end-effector
-    xyz_home = joint2pose(state["q"])
-    belief = np.asarray([0.33, 0.33, 0.33])
-    BETA = 8
+    coord_home = np.asarray(joint2pose(state["q"]))
+    # print(coord_home)
+    belief = np.asarray([0.25, 0.25, 0.25, 0.25])
+    BETA = 12
+    translation_mode = True
 
     print('[*] Ready for a teleoperation...')
 
     #Set up the initial robotInit.txt file
-    send2hololens(goals, belief, xyz_home, False)
+    send2hololens(goals, belief, coord_home, False)
     #Start the Web Server
     print('[*] Starting Server')
-    server = subprocess.Popen(["python3", "server.py"])
+    #server = subprocess.Popen(["python3", "server.py"])
     print('[*] Server Ready')
     lastsend = datetime.now() - sendfreq
+    start_time = datetime.now()
 
     while True:
 
 
         # read the current state of the robot + the xyz position
         state = readState(conn)
-        xyz_curr = joint2pose(state["q"])
+        coord_curr = np.asarray(joint2pose(state["q"]))
+        # print(xyz_curr, rot_curr)
         # print(xyz_curr) THis is where the robot currently is
 
         # get the humans joystick input
-        z, grasp, stop = interface.input()
+        z, mode, stop = interface.input()
+        if mode and (datetime.now() - start_time > timedelta(seconds=0.2)):
+            translation_mode = not translation_mode
+            start_time = datetime.now()
+
         if stop:
-            os.killpg(os.getpgid(server.pid), signal.SIGTERM)
+            # os.killpg(os.getpgid(server.pid), signal.SIGTERM)
             #Run this command if the server doesnt stop correctly to find process you need to kill: lsof -i :8080
+            return_home(conn)
             print("[*] Done!")
             return True
 
         # this is where we compute the belief
         # belief = probability that the human wants each goal
         # belief = [confidence in goal 1, confidence in goal 2]
-        dist_start = np.linalg.norm(xyz_curr - xyz_home)
-        dist_goal1 = np.linalg.norm(goal1 - xyz_curr)
-        dist_goal2 = np.linalg.norm(goal2 - xyz_curr)
-        dist_goal3 = np.linalg.norm(goal3 - xyz_curr)
-        dist_goal1_star = np.linalg.norm(goal1 - xyz_home)
-        dist_goal2_star = np.linalg.norm(goal2 - xyz_home)
-        dist_goal3_star = np.linalg.norm(goal3 - xyz_home)
-        belief[0] = np.exp(-BETA * (dist_start + dist_goal1)) / np.exp(-BETA * dist_goal1_star)
-        belief[1] = np.exp(-BETA * (dist_start + dist_goal2)) / np.exp(-BETA * dist_goal2_star)
-        belief[2] = np.exp(-BETA * (dist_start + dist_goal3)) / np.exp(-BETA * dist_goal3_star)
+        dist_start = np.linalg.norm(coord_curr - coord_home)
+        dist_goals = [np.linalg.norm(goal_coord - coord_curr) for goal_coord in goals]
+        dist_goals_star = [np.linalg.norm(goal_coord - coord_home) for goal_coord in goals]
+        belief = [np.exp(-BETA * (dist_start + dist_goal)) / np.exp(-BETA * dist_goal_star) for dist_goal, dist_goal_star in zip(dist_goals, dist_goals_star)]
         belief /= np.sum(belief)
-        #print(belief) #THis is the robot's current confidence
+        print(belief) # This is the robot's current confidence
 
-        xdot_g1 = np.clip(goal1 - xyz_curr, -0.05, 0.05)
-        xdot_g2 = np.clip(goal2 - xyz_curr, -0.05, 0.05)
-        xdot_g3 = np.clip(goal3 - xyz_curr, -0.05, 0.05)
-        xdot_g_all = [xdot_g1, xdot_g2, xdot_g3]
-        action_difference = np.abs(xdot_g1 - xdot_g2) # WHAT TO DO HERE??? not used elsewhere
+        xdot_g = [np.clip(goal - coord_curr, -0.05, 0.05) for goal in goals]
+        # action_difference = np.abs(xdot_g1 - xdot_g2) # WHAT TO DO HERE??? not used elsewhere
 
         # human inputs converted to dx, dy, dz velocities in the end-effector space
+
         xdot = [0]*6
-        # xdot[0] = action_scale * z[0]
-        # xdot[1] = action_scale * -z[1]
-        # xdot[2] = action_scale * -z[2]
-        if max(belief) < 0.45:
-            xdot[0] = action_scale * z[0]
-            xdot[1] = action_scale * -z[1]
-            xdot[2] = action_scale * -z[2]
-        elif max(belief) < 0.8:
-            which_goal = np.argmax(belief)
-            scalar = (max(belief)-0.45)/(0.35*action_scale)
-            xdot[0] = action_scale * (z[0] + xdot_g_all[which_goal][0]*scalar)
-            xdot[1] = action_scale * (-z[1] + xdot_g_all[which_goal][1]*scalar)
-            xdot[2] = action_scale * (-z[2] + xdot_g_all[which_goal][2]*scalar)
+
+        if translation_mode:
+            if max(belief) < 0.3:
+                xdot[0] = action_scale * z[0]
+                xdot[1] = action_scale * -z[1]
+                xdot[2] = action_scale * -z[2]
+                xdot[4] = action_scale * -3 * z[1]
+            elif max(belief) < 0.65:
+                which_goal = np.argmax(belief)
+                scalar = (max(belief) - 0.3)/(0.35*action_scale)
+                xdot[0] = action_scale * (z[0] + xdot_g[which_goal][0]*scalar)
+                xdot[1] = action_scale * (-z[1] + xdot_g[which_goal][1]*scalar)
+                xdot[2] = action_scale * (-z[2] + xdot_g[which_goal][2]*scalar)
+                xdot[3] = action_scale * (xdot_g[which_goal][3]*scalar)
+                xdot[4] = action_scale * (z[1] * -3 + xdot_g[which_goal][4]*scalar)
+                xdot[5] = action_scale * (xdot_g[which_goal][5]*scalar)
+            else:
+                which_goal = np.argmax(belief)
+                xdot[0] = xdot_g[which_goal][0]
+                xdot[1] = xdot_g[which_goal][1]
+                xdot[2] = xdot_g[which_goal][2]
+                xdot[3] = xdot_g[which_goal][3]
+                xdot[4] = xdot_g[which_goal][4]
+                xdot[5] = xdot_g[which_goal][5]
         else:
-            which_goal = np.argmax(belief)
-            xdot[0] = xdot_g_all[which_goal][0]
-            xdot[1] = xdot_g_all[which_goal][1]
-            xdot[2] = xdot_g_all[which_goal][2]
+            xdot[3] = 2 * action_scale * z[0]
+            xdot[4] = 2 * action_scale * z[1]
+            xdot[5] = 2 * action_scale * z[2]
 
         if (datetime.now() - lastsend) > sendfreq:
             #print("[*] Sending Updated Coordinates and Beliefs")
-            send2hololens(goals, belief, xyz_curr, True)
+            send2hololens(goals, belief, coord_curr, True)
             lastsend = datetime.now()
 
         # convert this command to joint space
