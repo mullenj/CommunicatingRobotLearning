@@ -212,7 +212,7 @@ def main():
     send2hololens(goals, belief, coord_home, False)
     #Start the Web Server
     print('[*] Starting Server')
-    #server = subprocess.Popen(["python3", "server.py"])
+    server = subprocess.Popen(["python3", "server.py"])
     print('[*] Server Ready')
     lastsend = datetime.now() - sendfreq
     start_time = datetime.now()
@@ -233,7 +233,7 @@ def main():
             start_time = datetime.now()
 
         if stop:
-            # os.killpg(os.getpgid(server.pid), signal.SIGTERM)
+            os.killpg(os.getpgid(server.pid), signal.SIGTERM)
             #Run this command if the server doesnt stop correctly to find process you need to kill: lsof -i :8080
             return_home(conn)
             print("[*] Done!")
@@ -262,9 +262,9 @@ def main():
                 xdot[1] = action_scale * -z[1]
                 xdot[2] = action_scale * -z[2]
                 xdot[4] = action_scale * -3 * z[1]
-            elif max(belief) < 0.65:
+            elif max(belief) < 0.75:
                 which_goal = np.argmax(belief)
-                scalar = (max(belief) - 0.3)/(0.35*action_scale)
+                scalar = (max(belief) - 0.3)/(0.45*action_scale)
                 xdot[0] = action_scale * (z[0] + xdot_g[which_goal][0]*scalar)
                 xdot[1] = action_scale * (-z[1] + xdot_g[which_goal][1]*scalar)
                 xdot[2] = action_scale * (-z[2] + xdot_g[which_goal][2]*scalar)
@@ -276,9 +276,9 @@ def main():
                 xdot[0] = xdot_g[which_goal][0]
                 xdot[1] = xdot_g[which_goal][1]
                 xdot[2] = xdot_g[which_goal][2]
-                xdot[3] = xdot_g[which_goal][3]
-                xdot[4] = xdot_g[which_goal][4]
-                xdot[5] = xdot_g[which_goal][5]
+                xdot[3] = 2 * xdot_g[which_goal][3]
+                xdot[4] = 2 * xdot_g[which_goal][4]
+                xdot[5] = 2 * xdot_g[which_goal][5]
         else:
             xdot[3] = 2 * action_scale * z[0]
             xdot[4] = 2 * action_scale * z[1]
