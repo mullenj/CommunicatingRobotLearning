@@ -24,6 +24,7 @@ np.set_printoptions(suppress=True)
     navigate to ~/libfranka/build
     run ./collab/velocity_control
 """
+home = np.asarray([ 0.709588, -0.446052,  0.020361, -2.536814, -1.168517,  0.98433,  -0.128633]) # real home
 # hard coded three goal positions
 # goal1 = np.asarray([0.627, -0.459, 0.629]) # Top Shelf
 # goal2 = np.asarray([0.634, -0.457, 0.318]) # Bottom Shelf
@@ -234,8 +235,8 @@ def main():
 
         if stop:
             os.killpg(os.getpgid(server.pid), signal.SIGTERM)
-            #Run this command if the server doesnt stop correctly to find process you need to kill: lsof -i :8080
-            return_home(conn)
+            #Run this command if the server doesnt stop correctly to find process you need to kill: lsof -i :8010
+            return_home(conn, home)
             print("[*] Done!")
             return True
 

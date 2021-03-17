@@ -191,7 +191,7 @@ def main():
         z, grasp, stop = interface.input()
         if stop:
             os.killpg(os.getpgid(server.pid), signal.SIGTERM)
-            #Run this command if the server doesnt stop correctly to find process you need to kill: lsof -i :8080
+            #Run this command if the server doesnt stop correctly to find process you need to kill: lsof -i :8010
             print("[*] Done!")
             return True
 

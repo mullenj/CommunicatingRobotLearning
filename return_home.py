@@ -22,9 +22,10 @@ import signal
     run ./collab/velocity_control
 """
 
-#home = np.asarray([0.022643, -0.789077, -0.000277, -2.358605, -0.005446, 1.573151, -0.708887]) # Original Home with effector rotated 90 deg around z axis
+#home = np.asarray([0.000297636, -0.785294, -0.000218009, -2.3567, 0.000397658, 1.57042, 0.785205]) # Original Home with effector rotated 90 deg around z axis
 #home = np.asarray([-0.272437, -0.523389, -0.339722, -2.608481,  1.12807,   1.153394, -1.352741]) # Facing away from user
-home = np.asarray([ 0.709588, -0.446052,  0.020361, -2.536814, -1.168517,  0.98433,  -0.128633])
+home = np.asarray([ 0.709588, -0.446052,  0.020361, -2.536814, -1.168517,  0.98433,  -0.128633]) # real home
+#home = np.asarray([0.136338, 0.26118, 0.157175, -1.80338, -0.00288155, 2.07467, 0.987893]) # for testing random trajectories
 
 def connect2robot(PORT):
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -98,7 +99,7 @@ def joint2pose(q):
     #print(H[:,3][:3])
     return H[:,3][:3]
 
-def return_home(conn):
+def return_home(conn, home):
     print('[*] Returning to Home!')
     action_scale = 0.05
 
