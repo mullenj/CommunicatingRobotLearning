@@ -22,6 +22,7 @@ teleop_task1.py functionality:
 * Four goals, two high and two low, two sideways, and two upright
 * Favoring tilted end goal (might want better implementation)
 * Parameter tuning (might want to lower beta? only requires one really good correction to favor straight and the assistance helps a lot)
+* Gripper
 
 To be implemented
 * Haptics
@@ -29,10 +30,11 @@ To be implemented
 teleop_task2.py is set up to run the second task of the user study. This task will involve the user maneuvering an object towards a goal with an obstacle in the way of the robots motion. The robot now needs to learn that it has to avoid this obstacle.
 
 teleop_task2.py functionality:
-* Discrete trajectories (switch to Cartesian to prevent favoring random trajectories, debug)
+* Discrete trajectories in Cartesian space
+* Assistance (Might need to be messed with to make what we want)
+* Gripper
 
 To be implemented
-* Assistance
 * Haptics
 
 teleop_task3.py will be set up to run the third task of the user study. This task will expand on the previous two by learning from the demonstrations in the second. However, this time it is not holding a cup and may be 'confused'. The robot begins running autonomously and the user has to provide corrections while they are distracted. This will be fleshed out more after the prior two are completed.

@@ -58,8 +58,9 @@ class Joystick(object):
         if abs(dz) < self.deadband:
             dz = 0.0
         A_pressed = self.gamepad.get_button(0)
+        B_pressed = self.gamepad.get_button(1)
         START_pressed = self.gamepad.get_button(7)
-        return [dx, dy, dz], A_pressed, START_pressed
+        return [dx, dy, dz], A_pressed, B_pressed, START_pressed
 
 
 def connect2robot(PORT):
@@ -77,6 +78,10 @@ def send2robot(conn, qdot, limit=1.0):
         qdot = np.asarray([qdot[i] * limit/scale for i in range(7)])
     send_msg = np.array2string(qdot, precision=5, separator=',',suppress_small=True)[1:-1]
     send_msg = "s," + send_msg + ","
+    conn.send(send_msg.encode())
+
+def send2gripper(conn):
+    send_msg = "s"
     conn.send(send_msg.encode())
 
 def listen2robot(conn):
@@ -191,12 +196,14 @@ def send2hololens(goals, belief, coord_curr, initialized):
 def main():
 
     PORT_robot = 8080
+    PORT_gripper = 8081
     action_scale = 0.05
     interface = Joystick()
 
     print('[*] Connecting to low-level controller...')
 
     conn = connect2robot(PORT_robot) #connect to other computer
+    conn_gripper = connect2robot(PORT_gripper)
 
     # readState -> give you a dictionary with things like joint values, velocity, torque
     state = readState(conn)
@@ -206,6 +213,7 @@ def main():
     belief = np.asarray([0.25, 0.25, 0.25, 0.25])
     BETA = 12
     translation_mode = True
+    gripper_closed = False
 
     print('[*] Ready for a teleoperation...')
 
@@ -228,10 +236,14 @@ def main():
         # print(xyz_curr) THis is where the robot currently is
 
         # get the humans joystick input
-        z, mode, stop = interface.input()
+        z, mode, grasp, stop = interface.input()
         if mode and (datetime.now() - start_time > timedelta(seconds=0.2)):
             translation_mode = not translation_mode
             start_time = datetime.now()
+        if grasp and (datetime.now() - start_time > timedelta(seconds=0.2)):
+            gripper_closed = not gripper_closed
+            start_time = datetime.now()
+            send2gripper(conn_gripper)
 
         if stop:
             os.killpg(os.getpgid(server.pid), signal.SIGTERM)

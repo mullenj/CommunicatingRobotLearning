@@ -75,8 +75,9 @@ class Joystick(object):
         if abs(dz) < self.deadband:
             dz = 0.0
         A_pressed = self.gamepad.get_button(0)
+        B_pressed = self.gamepad.get_button(1)
         START_pressed = self.gamepad.get_button(7)
-        return [dx, dy, dz], A_pressed, START_pressed
+        return [dx, dy, dz], A_pressed, B_pressed, START_pressed
 
 
 def connect2robot(PORT):
@@ -94,6 +95,10 @@ def send2robot(conn, qdot, limit=1.0):
         qdot = np.asarray([qdot[i] * limit/scale for i in range(7)])
     send_msg = np.array2string(qdot, precision=5, separator=',',suppress_small=True)[1:-1]
     send_msg = "s," + send_msg + ","
+    conn.send(send_msg.encode())
+
+def send2gripper(conn):
+    send_msg = "s"
     conn.send(send_msg.encode())
 
 def listen2robot(conn):
@@ -148,7 +153,7 @@ def joint2pose(q):
     H_panda_hand = TransZ(-np.pi/4, 0, 0, 0.2105)
     H = np.linalg.multi_dot([H1, H2, H3, H4, H5, H6, H7, H_panda_hand])
     H_no_hand = np.linalg.multi_dot([H1, H2, H3, H4, H5, H6, H7])
-    return np.concatenate((H[:,3][:3], rotationMatrixToEulerAngles(H_no_hand[:3,:3])), axis = None)
+    return H[:,3][:3]
 
 # Checks if a matrix is a valid rotation matrix.
 def isRotationMatrix(R) :
@@ -181,14 +186,16 @@ def rotationMatrixToEulerAngles(R) :
 
     return np.array([x, y, z])
 
-
-def send2hololens(goals, belief, coord_curr, initialized):
-    #print(belief)
-    #print(xyz_curr)
+'''
+This function allows us to send all of the necessary information to the hololens.
+This information changes based off of what state the program is in, initialized
+or in progress.
+'''
+def send2hololens(belief, coord_curr, initialized, waypoints):
     if initialized:
         with open('robotUpdate.txt', 'w') as f:
-            f.write(f"{coord_curr[0]}\t{coord_curr[1]}\t{coord_curr[2]}\t{coord_curr[3]}\t{coord_curr[4]}\t{coord_curr[5]}\n")
-            for count, (goal, belief_x) in enumerate(zip(goals, belief)):
+            f.write(f"{coord_curr[0]}\t{coord_curr[1]}\t{coord_curr[2]}\n")
+            for count, belief_x in enumerate(belief):
                 if count < len(belief) - 1:
                     f.write(f"{belief_x}\n")
                 else:
@@ -196,24 +203,31 @@ def send2hololens(goals, belief, coord_curr, initialized):
 
 
     else:
+        points = [[joint2pose(point) for point in waypoint] for waypoint in waypoints]
+        goals = [point[4] for point in points]
         with open('robotInit.txt', 'w') as f:
-            f.write(f"{coord_curr[0]}\t{coord_curr[1]}\t{coord_curr[2]}\t{coord_curr[3]}\t{coord_curr[4]}\t{coord_curr[5]}\tCurrent Location\n")
+            f.write(f"{coord_curr[0]}\t{coord_curr[1]}\t{coord_curr[2]}\tCurrent Location\n")
             for count, (goal, belief_x) in enumerate(zip(goals, belief)):
-                if count < len(belief) - 1:
-                    f.write(f"{goal[0]}\t{goal[1]}\t{goal[2]}\t{goal[3]}\t{goal[4]}\t{goal[5]}\tGoal {count + 1}\t{belief_x}\n")
-                else:
-                    f.write(f"{goal[0]}\t{goal[1]}\t{goal[2]}\t{goal[3]}\t{goal[4]}\t{goal[5]}\tGoal {count + 1}\t{belief_x}")
+                f.write(f"{goal[0]}\t{goal[1]}\t{goal[2]}\tGoal {count + 1}\t{belief_x}\n")
+            for count_1, point in enumerate(points):
+                for count_2, p in enumerate(point):
+                    if count_1 < len(points) - 1 or count_2 < len(point) - 1:
+                        f.write(f"traj\t{count_1}\t{p[0]}\t{p[1]}\t{p[2]}\n")
+                    else:
+                        f.write(f"traj\t{count_1}\t{p[0]}\t{p[1]}\t{p[2]}")
 
 
 def main():
 
     PORT_robot = 8080
+    PORT_gripper = 8081
     action_scale = 0.05
     interface = Joystick()
 
     print('[*] Connecting to low-level controller...')
 
     conn = connect2robot(PORT_robot) #connect to other computer
+    conn_gripper = connect2robot(PORT_gripper)
 
     # readState -> give you a dictionary with things like joint values, velocity, torque
     state = readState(conn)
@@ -221,19 +235,21 @@ def main():
     coord_home = np.asarray(joint2pose(state["q"]))
     # print(coord_home)
 
-    # Prepare Trajectories
+    # Prepare Trajectories by loading them into the trajectory class and getting an array of points along the trajectory to compare against
     playback_time = 20.0
     proportional_gain = 5.0
-    trajectories = [Trajectory(pickle.load( open( traj + ".pkl", "rb" ) ), playback_time) for traj in trajectory_files]
-    trajectories = [np.asarray([traj.get(time)for time in list(np.linspace(0, playback_time, int(playback_time * 100 + 1)))]) for traj in trajectories]
-
+    waypoints = [pickle.load( open( traj + ".pkl", "rb" ) ) for traj in trajectory_files]
+    trajectories = [Trajectory(waypoint, playback_time) for waypoint in waypoints]
+    trajectories = [np.asarray([joint2pose(traj.get(time)) for time in list(np.linspace(0, playback_time, int(playback_time * 100 + 1)))]) for traj in trajectories]
     belief = np.asarray([0.25, 0.25, 0.25, 0.25])
-    BETA = 5
+    BETA = 12
+    start_mode = True
+    gripper_closed = False
 
     print('[*] Ready for a teleoperation...')
 
     #Set up the initial robotInit.txt file
-    # send2hololens(goals, belief, coord_home, False)
+    send2hololens(belief, coord_home, False, waypoints)
     #Start the Web Server
     print('[*] Starting Server')
     # server = subprocess.Popen(["python3", "server.py"])
@@ -249,9 +265,16 @@ def main():
         coord_curr = np.asarray(joint2pose(state["q"]))
 
         # get the humans joystick input
-        z, mode, stop = interface.input()
+        z, mode, grasp, stop = interface.input()
+        if grasp and (datetime.now() - start_time > timedelta(seconds=0.2)):
+            gripper_closed = not gripper_closed
+            start_time = datetime.now()
+            send2gripper(conn_gripper)
+        if mode and (datetime.now() - start_time > timedelta(seconds=0.2)):
+            start_mode = not start_mode
 
-        if stop:
+        # Stop if button pressed or if going to hit the cup thing
+        if stop or (coord_curr[0] > 0.45 and coord_curr[0] < 0.65 and coord_curr[1] > -0.02 and coord_curr[1] < 0.27 and coord_curr[2] < 0.26):
             # os.killpg(os.getpgid(server.pid), signal.SIGTERM)
             #Run this command if the server doesnt stop correctly to find process you need to kill: lsof -i :8010
             return_home(conn, home)
@@ -261,40 +284,48 @@ def main():
         # this is where we compute the belief
         # belief = probability that the human wants each goal
         # belief = [confidence in goal 1, confidence in goal 2]
-        dist_trajectories = [min(np.linalg.norm(trajectory - state["q"], axis = 1)) for trajectory in trajectories]
+        # Get the minimum distance to a trajectory in cartesian space, and set the belief
+        dist_trajectories = [min(np.linalg.norm(trajectory - coord_curr, axis = 1)) for trajectory in trajectories]
         belief_denominator = sum(np.exp(-BETA * np.asarray(dist_trajectories)))
         belief = [np.exp(-BETA * dist_trajectory) / belief_denominator for dist_trajectory in dist_trajectories]
         belief /= np.sum(belief)
         print(belief) # This is the robot's current confidence
 
-        # xdot_g = [np.clip(goal - coord_curr, -0.05, 0.05) for goal in goals]
+        # get the next location to navigate towards
+        which_goal = np.argmax(belief)
+        try:
+            next_loc = trajectories[which_goal][np.argmin(np.linalg.norm(trajectories[which_goal] - coord_curr, axis = 1)) + 10]
+            action = proportional_gain * (next_loc - coord_curr)
+        except:
+            print("Exception")
+            action = (0, 0, 0)
+        finally:
+            if (coord_curr[2] < 0.075):
+                action = (0, 0, 0)
 
-        # human inputs converted to dx, dy, dz velocities in the end-effector space
+        if start_mode:
+            action = (0, 0, 0)
 
+        # Navigate
         xdot = [0]*6
-        xdot[0] = action_scale * z[0]
-        xdot[1] = action_scale * -z[1]
-        xdot[2] = action_scale * -z[2]
-        # if max(belief) < 0.3:
-        #     xdot[0] = action_scale * z[0]
-        #     xdot[1] = action_scale * -z[1]
-        #     xdot[2] = action_scale * -z[2]
-        # elif max(belief) < 0.65:
-        #     which_goal = np.argmax(belief)
-        #     scalar = (max(belief) - 0.3)/(0.35*action_scale)
-        #     xdot[0] = action_scale * (z[0] + xdot_g[which_goal][0]*scalar)
-        #     xdot[1] = action_scale * (-z[1] + xdot_g[which_goal][1]*scalar)
-        #     xdot[2] = action_scale * (-z[2] + xdot_g[which_goal][2]*scalar)
-        # else:
-        #     which_goal = np.argmax(belief)
-        #     xdot[0] = xdot_g[which_goal][0]
-        #     xdot[1] = xdot_g[which_goal][1]
-        #     xdot[2] = xdot_g[which_goal][2]
+        if max(belief) < 0.3:
+            xdot[0] = action_scale * z[0] + 0.5 *action[0]
+            xdot[1] = action_scale * -z[1] + 0.5 *action[1]
+            xdot[2] = action_scale * -z[2] + 0.5 *action[2]
+        elif max(belief) < 0.55:
+            scalar = 1 + (max(belief) - 0.3)/(0.25)
+            xdot[0] = action_scale * z[0] + action[0] * scalar
+            xdot[1] = action_scale * -z[1] + action[1] * scalar
+            xdot[2] = action_scale * -z[2] + action[2] * scalar
+        else:
+            xdot[0] = 2 * action[0]
+            xdot[1] = 2 * action[1]
+            xdot[2] = 2 * action[2]
 
-        # if (datetime.now() - lastsend) > sendfreq:
-        #     #print("[*] Sending Updated Coordinates and Beliefs")
-        #     send2hololens(goals, belief, coord_curr, True)
-        #     lastsend = datetime.now()
+        if (datetime.now() - lastsend) > sendfreq:
+            #print("[*] Sending Updated Coordinates and Beliefs")
+            send2hololens(belief, coord_curr, True, None)
+            lastsend = datetime.now()
 
         # convert this command to joint space
         qdot = xdot2qdot(xdot, state)
