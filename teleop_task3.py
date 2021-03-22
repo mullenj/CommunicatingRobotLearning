@@ -1,14 +1,12 @@
 import socket
 import numpy as np
 import math
-import pickle
 import pygame
 import os
 from datetime import datetime, timedelta
 import subprocess
 import signal
 from return_home import return_home
-from scipy.interpolate import interp1d
 np.set_printoptions(suppress=True)
 
 """
@@ -23,36 +21,17 @@ np.set_printoptions(suppress=True)
     navigate to ~/libfranka/build
     run ./collab/velocity_control
 """
+home = np.asarray([0.709588, -0.446052, 0.020361, -2.536814, -1.168517, 0.98433, -0.128633])  # real home
+# hard coded three goal positions
+# goal1 = np.asarray([0.627, -0.459, 0.629]) # Top Shelf
+# goal2 = np.asarray([0.634, -0.457, 0.318]) # Bottom Shelf
+# goals = [goal1, goal2]
+goal1 = np.asarray([0.627, -0.459, 0.629, 1.59, 0.766, 0.058])  # Top Shelf flat
+goal2 = np.asarray([0.634, -0.457, 0.318, 1.59, 0.766, 0.058])  # Bottom Shelf flat
+# goal3 = np.asarray([0.627, -0.459, 0.629, 1.59, -0.795, 0.027])  # Top Shelf sideways
+# goal4 = np.asarray([0.634, -0.457, 0.318, 1.59, -0.795, 0.027])  # Bottom Shelf sideways
+goals = [goal1, goal2] # , goal3, goal4]
 sendfreq = timedelta(seconds=0.1)
-trajectory_files = ["task2_path0", "task2_path1", "task2_path2", "task2_path3"]
-home = np.asarray([0.000297636, -0.785294, -0.000218009, -2.3567, 0.000397658, 1.57042, 0.785205])
-
-
-class Trajectory(object):
-
-    def __init__(self, xi, T):
-        """ create cublic interpolators between waypoints """
-        self.xi = np.asarray(xi)
-        self.T = T
-        self.n_waypoints = xi.shape[0]
-        timesteps = np.linspace(0, self.T, self.n_waypoints)
-        self.f1 = interp1d(timesteps, self.xi[:, 0], kind='cubic')
-        self.f2 = interp1d(timesteps, self.xi[:, 1], kind='cubic')
-        self.f3 = interp1d(timesteps, self.xi[:, 2], kind='cubic')
-        self.f4 = interp1d(timesteps, self.xi[:, 3], kind='cubic')
-        self.f5 = interp1d(timesteps, self.xi[:, 4], kind='cubic')
-        self.f6 = interp1d(timesteps, self.xi[:, 5], kind='cubic')
-        self.f7 = interp1d(timesteps, self.xi[:, 6], kind='cubic')
-
-    def get(self, t):
-        """ get interpolated position """
-        if t < 0:
-            q = [self.f1(0), self.f2(0), self.f3(0), self.f4(0), self.f5(0), self.f6(0), self.f7(0)]
-        elif t < self.T:
-            q = [self.f1(t), self.f2(t), self.f3(t), self.f4(t), self.f5(t), self.f6(t), self.f7(t)]
-        else:
-            q = [self.f1(self.T), self.f2(self.T), self.f3(self.T), self.f4(self.T), self.f5(self.T), self.f6(self.T), self.f7(self.T)]
-        return np.asarray(q)
 
 
 class Joystick(object):
@@ -88,18 +67,21 @@ def connect2robot(PORT):
     conn, addr = s.accept()
     return conn
 
+
 def send2robot(conn, qdot, limit=1.0):
     qdot = np.asarray(qdot)
     scale = np.linalg.norm(qdot)
     if scale > limit:
-        qdot = np.asarray([qdot[i] * limit/scale for i in range(7)])
+        qdot = np.asarray([qdot[i] * limit / scale for i in range(7)])
     send_msg = np.array2string(qdot, precision=5, separator=',', suppress_small=True)[1:-1]
     send_msg = "s," + send_msg + ","
     conn.send(send_msg.encode())
 
+
 def send2gripper(conn):
     send_msg = "s"
     conn.send(send_msg.encode())
+
 
 def listen2robot(conn):
     state_length = 7 + 7 + 7 + 42
@@ -107,7 +89,7 @@ def listen2robot(conn):
     state_str = list(message.split(","))
     for idx in range(len(state_str)):
         if state_str[idx] == "s":
-            state_str = state_str[idx+1:idx+1+state_length]
+            state_str = state_str[idx + 1:idx + 1 + state_length]
             break
     try:
         state_vector = [float(item) for item in state_str]
@@ -123,6 +105,7 @@ def listen2robot(conn):
     state["J"] = state_vector[21:].reshape((7, 6)).T
     return state
 
+
 def readState(conn):
     while True:
         state = listen2robot(conn)
@@ -130,36 +113,42 @@ def readState(conn):
             break
     return state
 
+
 def xdot2qdot(xdot, state):
     J_pinv = np.linalg.pinv(state["J"])
     return J_pinv @ np.asarray(xdot)
 
+
 def joint2pose(q):
     def RotX(q):
         return np.array([[1, 0, 0, 0], [0, np.cos(q), -np.sin(q), 0], [0, np.sin(q), np.cos(q), 0], [0, 0, 0, 1]])
+
     def RotZ(q):
         return np.array([[np.cos(q), -np.sin(q), 0, 0], [np.sin(q), np.cos(q), 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]])
+
     def TransX(q, x, y, z):
         return np.array([[1, 0, 0, x], [0, np.cos(q), -np.sin(q), y], [0, np.sin(q), np.cos(q), z], [0, 0, 0, 1]])
+
     def TransZ(q, x, y, z):
         return np.array([[np.cos(q), -np.sin(q), 0, x], [np.sin(q), np.cos(q), 0, y], [0, 0, 1, z], [0, 0, 0, 1]])
     H1 = TransZ(q[0], 0, 0, 0.333)
-    H2 = np.dot(RotX(-np.pi/2), RotZ(q[1]))
-    H3 = np.dot(TransX(np.pi/2, 0, -0.316, 0), RotZ(q[2]))
-    H4 = np.dot(TransX(np.pi/2, 0.0825, 0, 0), RotZ(q[3]))
-    H5 = np.dot(TransX(-np.pi/2, -0.0825, 0.384, 0), RotZ(q[4]))
-    H6 = np.dot(RotX(np.pi/2), RotZ(q[5]))
-    H7 = np.dot(TransX(np.pi/2, 0.088, 0, 0), RotZ(q[6]))
-    H_panda_hand = TransZ(-np.pi/4, 0, 0, 0.2105)
+    H2 = np.dot(RotX(-np.pi / 2), RotZ(q[1]))
+    H3 = np.dot(TransX(np.pi / 2, 0, -0.316, 0), RotZ(q[2]))
+    H4 = np.dot(TransX(np.pi / 2, 0.0825, 0, 0), RotZ(q[3]))
+    H5 = np.dot(TransX(-np.pi / 2, -0.0825, 0.384, 0), RotZ(q[4]))
+    H6 = np.dot(RotX(np.pi / 2), RotZ(q[5]))
+    H7 = np.dot(TransX(np.pi / 2, 0.088, 0, 0), RotZ(q[6]))
+    H_panda_hand = TransZ(-np.pi / 4, 0, 0, 0.2105)
     H = np.linalg.multi_dot([H1, H2, H3, H4, H5, H6, H7, H_panda_hand])
-    # H_no_hand = np.linalg.multi_dot([H1, H2, H3, H4, H5, H6, H7])
-    return H[:, 3][:3]
+    H_no_hand = np.linalg.multi_dot([H1, H2, H3, H4, H5, H6, H7])
+    return np.concatenate((H[:, 3][:3], rotationMatrixToEulerAngles(H_no_hand[:3, :3])), axis=None)
+
 
 # Checks if a matrix is a valid rotation matrix.
 def isRotationMatrix(R):
     Rt = np.transpose(R)
     shouldBeIdentity = np.dot(Rt, R)
-    Id = np.identity(3, dtype = R.dtype)
+    Id = np.identity(3, dtype=R.dtype)
     n = np.linalg.norm(Id - shouldBeIdentity)
     return n < 1e-6
 
@@ -187,33 +176,25 @@ def rotationMatrixToEulerAngles(R):
     return np.array([x, y, z])
 
 
-'''
-This function allows us to send all of the necessary information to the hololens.
-This information changes based off of what state the program is in, initialized
-or in progress.
-'''
-def send2hololens(belief, coord_curr, initialized, waypoints):
+def send2hololens(goals, belief, coord_curr, initialized):
+    # print(belief)
+    # print(xyz_curr)
     if initialized:
         with open('robotUpdate.txt', 'w') as f:
-            f.write(f"{coord_curr[0]}\t{coord_curr[1]}\t{coord_curr[2]}\n")
-            for count, belief_x in enumerate(belief):
+            f.write(f"{coord_curr[0]}\t{coord_curr[1]}\t{coord_curr[2]}\t{coord_curr[3]}\t{coord_curr[4]}\t{coord_curr[5]}\n")
+            for count, (goal, belief_x) in enumerate(zip(goals, belief)):
                 if count < len(belief) - 1:
                     f.write(f"{belief_x}\n")
                 else:
                     f.write(f"{belief_x}")
     else:
-        points = [[joint2pose(point) for point in waypoint] for waypoint in waypoints]
-        goals = [point[4] for point in points]
         with open('robotInit.txt', 'w') as f:
-            f.write(f"{coord_curr[0]}\t{coord_curr[1]}\t{coord_curr[2]}\tCurrent Location\n")
+            f.write(f"{coord_curr[0]}\t{coord_curr[1]}\t{coord_curr[2]}\t{coord_curr[3]}\t{coord_curr[4]}\t{coord_curr[5]}\tCurrent Location\n")
             for count, (goal, belief_x) in enumerate(zip(goals, belief)):
-                f.write(f"{goal[0]}\t{goal[1]}\t{goal[2]}\tGoal {count + 1}\t{belief_x}\n")
-            for count_1, point in enumerate(points):
-                for count_2, p in enumerate(point):
-                    if count_1 < len(points) - 1 or count_2 < len(point) - 1:
-                        f.write(f"traj\t{count_1}\t{p[0]}\t{p[1]}\t{p[2]}\n")
-                    else:
-                        f.write(f"traj\t{count_1}\t{p[0]}\t{p[1]}\t{p[2]}")
+                if count < len(belief) - 1:
+                    f.write(f"{goal[0]}\t{goal[1]}\t{goal[2]}\t{goal[3]}\t{goal[4]}\t{goal[5]}\tGoal {count + 1}\t{belief_x}\n")
+                else:
+                    f.write(f"{goal[0]}\t{goal[1]}\t{goal[2]}\t{goal[3]}\t{goal[4]}\t{goal[5]}\tGoal {count + 1}\t{belief_x}")
 
 
 def main():
@@ -225,7 +206,7 @@ def main():
 
     print('[*] Connecting to low-level controller...')
 
-    conn = connect2robot(PORT_robot) # connect to other computer
+    conn = connect2robot(PORT_robot)  # connect to other computer
     conn_gripper = connect2robot(PORT_gripper)
 
     # readState -> give you a dictionary with things like joint values, velocity, torque
@@ -233,22 +214,15 @@ def main():
     # joint2pose -> forward kinematics: convert the joint position to the xyz position of the end-effector
     coord_home = np.asarray(joint2pose(state["q"]))
     # print(coord_home)
-
-    # Prepare Trajectories by loading them into the trajectory class and getting an array of points along the trajectory to compare against
-    playback_time = 20.0
-    proportional_gain = 5.0
-    waypoints = [pickle.load(open(traj + ".pkl", "rb")) for traj in trajectory_files]
-    trajectories = [Trajectory(waypoint, playback_time) for waypoint in waypoints]
-    trajectories = [np.asarray([joint2pose(traj.get(time)) for time in list(np.linspace(0, playback_time, int(playback_time * 100 + 1)))]) for traj in trajectories]
-    belief = np.asarray([0.25, 0.25, 0.25, 0.25])
-    BETA = 12
+    belief = np.asarray([0.5, 0.5])
+    BETA = 6
     start_mode = True
     gripper_closed = False
 
     print('[*] Ready for a teleoperation...')
 
     # Set up the initial robotInit.txt file
-    send2hololens(belief, coord_home, False, waypoints)
+    send2hololens(goals, belief, coord_home, False)
     # Start the Web Server
     print('[*] Starting Server')
     server = subprocess.Popen(["python3", "server.py"])
@@ -260,18 +234,20 @@ def main():
         # read the current state of the robot + the xyz position
         state = readState(conn)
         coord_curr = np.asarray(joint2pose(state["q"]))
+        # print(xyz_curr, rot_curr)
+        # print(xyz_curr) THis is where the robot currently is
 
         # get the humans joystick input
         z, mode, grasp, stop = interface.input()
+        if mode and (datetime.now() - start_time > timedelta(seconds=0.2)):
+            start_mode = not start_mode
+            start_time = datetime.now()
         if grasp and (datetime.now() - start_time > timedelta(seconds=0.2)):
             gripper_closed = not gripper_closed
             start_time = datetime.now()
             send2gripper(conn_gripper)
-        if mode and (datetime.now() - start_time > timedelta(seconds=0.2)):
-            start_mode = not start_mode
 
-        # Stop if button pressed or if going to hit the cup thing
-        if stop or (coord_curr[0] > 0.45 and coord_curr[0] < 0.65 and coord_curr[1] > -0.02 and coord_curr[1] < 0.27 and coord_curr[2] < 0.26):
+        if stop:
             os.killpg(os.getpgid(server.pid), signal.SIGTERM)
             # Run this command if the server doesnt stop correctly to find process you need to kill: lsof -i :8010
             return_home(conn, home)
@@ -281,47 +257,34 @@ def main():
         # this is where we compute the belief
         # belief = probability that the human wants each goal
         # belief = [confidence in goal 1, confidence in goal 2]
-        # Get the minimum distance to a trajectory in cartesian space, and set the belief
-        dist_trajectories = [min(np.linalg.norm(trajectory - coord_curr, axis = 1)) for trajectory in trajectories]
-        belief_denominator = sum(np.exp(-BETA * np.asarray(dist_trajectories)))
-        belief = [np.exp(-BETA * dist_trajectory) / belief_denominator for dist_trajectory in dist_trajectories]
+        dist_start = np.linalg.norm(coord_curr - coord_home)
+        dist_goals = [np.linalg.norm(goal_coord - coord_curr) for goal_coord in goals]
+        dist_goals_star = [np.linalg.norm(goal_coord - coord_home) for goal_coord in goals]
+        belief = [np.exp(-BETA * (dist_start + dist_goal)) / np.exp(-BETA * dist_goal_star) for dist_goal, dist_goal_star in zip(dist_goals, dist_goals_star)]
         belief /= np.sum(belief)
-        print(belief) # This is the robot's current confidence
+        print(belief)  # This is the robot's current confidence
 
-        # get the next location to navigate towards
+        xdot_g = [np.clip(goal - coord_curr, -0.05, 0.05) for goal in goals]
+        # action_difference = np.abs(xdot_g1 - xdot_g2) # WHAT TO DO HERE??? not used elsewhere
+
+        # human inputs converted to dx, dy, dz velocities in the end-effector space
+        xdot = [0]*6
         which_goal = np.argmax(belief)
-        try:
-            next_loc = trajectories[which_goal][np.argmin(np.linalg.norm(trajectories[which_goal] - coord_curr, axis = 1)) + 10]
-            action = proportional_gain * (next_loc - coord_curr)
-        except:
-            print("Exception")
-            action = (0, 0, 0)
-        finally:
-            if (coord_curr[2] < 0.075):
-                action = (0, 0, 0)
+        if max(belief) < 0.8:
+            xdot[0] = action_scale * z[0] + xdot_g[which_goal][0]
+            xdot[1] = action_scale * -z[1] + xdot_g[which_goal][1]
+            xdot[2] = action_scale * -z[2] + xdot_g[which_goal][2]
+        else:
+            xdot[0] = xdot_g[which_goal][0]
+            xdot[1] = xdot_g[which_goal][1]
+            xdot[2] = xdot_g[which_goal][2]
 
         if start_mode:
-            action = (0, 0, 0)
-
-        # Navigate
-        xdot = [0]*6
-        if max(belief) < 0.3:
-            xdot[0] = action_scale * z[0] + 0.5 * action[0]
-            xdot[1] = action_scale * -z[1] + 0.5 * action[1]
-            xdot[2] = action_scale * -z[2] + 0.5 * action[2]
-        elif max(belief) < 0.55:
-            scalar = 1 + (max(belief) - 0.3)/(0.25)
-            xdot[0] = action_scale * z[0] + action[0] * scalar
-            xdot[1] = action_scale * -z[1] + action[1] * scalar
-            xdot[2] = action_scale * -z[2] + action[2] * scalar
-        else:
-            xdot[0] = 2 * action[0]
-            xdot[1] = 2 * action[1]
-            xdot[2] = 2 * action[2]
+            xdot = [0]*6
 
         if (datetime.now() - lastsend) > sendfreq:
             # print("[*] Sending Updated Coordinates and Beliefs")
-            send2hololens(belief, coord_curr, True, None)
+            send2hololens(goals, belief, coord_curr, True)
             lastsend = datetime.now()
 
         # convert this command to joint space

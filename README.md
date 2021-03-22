@@ -37,4 +37,13 @@ teleop_task2.py functionality:
 To be implemented
 * Haptics
 
-teleop_task3.py will be set up to run the third task of the user study. This task will expand on the previous two by learning from the demonstrations in the second. However, this time it is not holding a cup and may be 'confused'. The robot begins running autonomously and the user has to provide corrections while they are distracted. This will be fleshed out more after the prior two are completed.
+teleop_task3.py is set up to run the third task of the user study. This task will expand on the previous two by 'learning' from the demonstrations in the first. The robot begins running autonomously and the user has to provide corrections while they are distracted. The haptic device will play a key role in alerting the user to what the robot is about to do and its confusion.
+
+teleop_task3.py functionality:
+* Two goals, one high and one low (no tilting at the moment)
+
+To be implemented
+* Haptics
+* Initialize to favor one of the two, pseudo-randomly
+
+Functionality needs to be added to all tasks to save off data prior to conducting the user study

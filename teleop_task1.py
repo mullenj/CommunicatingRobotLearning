@@ -1,10 +1,7 @@
 import socket
-import time
 import numpy as np
 import math
-import pickle
 import pygame
-import sys
 import os
 from datetime import datetime, timedelta
 import subprocess
@@ -24,18 +21,17 @@ np.set_printoptions(suppress=True)
     navigate to ~/libfranka/build
     run ./collab/velocity_control
 """
-home = np.asarray([ 0.709588, -0.446052,  0.020361, -2.536814, -1.168517,  0.98433,  -0.128633]) # real home
+home = np.asarray([0.709588, -0.446052, 0.020361, -2.536814, -1.168517, 0.98433, -0.128633])  # real home
 # hard coded three goal positions
 # goal1 = np.asarray([0.627, -0.459, 0.629]) # Top Shelf
 # goal2 = np.asarray([0.634, -0.457, 0.318]) # Bottom Shelf
 # goals = [goal1, goal2]
-goal1 = np.asarray([0.627, -0.459, 0.629, 1.59, 0.766, 0.058]) # Top Shelf flat
-goal2 = np.asarray([0.634, -0.457, 0.318, 1.59, 0.766, 0.058]) # Bottom Shelf flat
-goal3 = np.asarray([0.627, -0.459, 0.629, 1.59, -0.795, 0.027]) # Top Shelf sideways
-goal4 = np.asarray([0.634, -0.457, 0.318, 1.59, -0.795, 0.027]) # Bottom Shelf sideways
+goal1 = np.asarray([0.627, -0.459, 0.629, 1.59, 0.766, 0.058])  # Top Shelf flat
+goal2 = np.asarray([0.634, -0.457, 0.318, 1.59, 0.766, 0.058])  # Bottom Shelf flat
+goal3 = np.asarray([0.627, -0.459, 0.629, 1.59, -0.795, 0.027])  # Top Shelf sideways
+goal4 = np.asarray([0.634, -0.457, 0.318, 1.59, -0.795, 0.027])  # Bottom Shelf sideways
 goals = [goal1, goal2, goal3, goal4]
 sendfreq = timedelta(seconds=0.1)
-
 
 
 class Joystick(object):
@@ -71,18 +67,21 @@ def connect2robot(PORT):
     conn, addr = s.accept()
     return conn
 
+
 def send2robot(conn, qdot, limit=1.0):
     qdot = np.asarray(qdot)
     scale = np.linalg.norm(qdot)
     if scale > limit:
-        qdot = np.asarray([qdot[i] * limit/scale for i in range(7)])
-    send_msg = np.array2string(qdot, precision=5, separator=',',suppress_small=True)[1:-1]
+        qdot = np.asarray([qdot[i] * limit / scale for i in range(7)])
+    send_msg = np.array2string(qdot, precision=5, separator=',', suppress_small=True)[1:-1]
     send_msg = "s," + send_msg + ","
     conn.send(send_msg.encode())
+
 
 def send2gripper(conn):
     send_msg = "s"
     conn.send(send_msg.encode())
+
 
 def listen2robot(conn):
     state_length = 7 + 7 + 7 + 42
@@ -90,7 +89,7 @@ def listen2robot(conn):
     state_str = list(message.split(","))
     for idx in range(len(state_str)):
         if state_str[idx] == "s":
-            state_str = state_str[idx+1:idx+1+state_length]
+            state_str = state_str[idx + 1:idx + 1 + state_length]
             break
     try:
         state_vector = [float(item) for item in state_str]
@@ -103,8 +102,9 @@ def listen2robot(conn):
     state["q"] = state_vector[0:7]
     state["dq"] = state_vector[7:14]
     state["tau"] = state_vector[14:21]
-    state["J"] = state_vector[21:].reshape((7,6)).T
+    state["J"] = state_vector[21:].reshape((7, 6)).T
     return state
+
 
 def readState(conn):
     while True:
@@ -113,66 +113,72 @@ def readState(conn):
             break
     return state
 
+
 def xdot2qdot(xdot, state):
     J_pinv = np.linalg.pinv(state["J"])
     return J_pinv @ np.asarray(xdot)
 
+
 def joint2pose(q):
     def RotX(q):
         return np.array([[1, 0, 0, 0], [0, np.cos(q), -np.sin(q), 0], [0, np.sin(q), np.cos(q), 0], [0, 0, 0, 1]])
+
     def RotZ(q):
         return np.array([[np.cos(q), -np.sin(q), 0, 0], [np.sin(q), np.cos(q), 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]])
+
     def TransX(q, x, y, z):
         return np.array([[1, 0, 0, x], [0, np.cos(q), -np.sin(q), y], [0, np.sin(q), np.cos(q), z], [0, 0, 0, 1]])
+
     def TransZ(q, x, y, z):
         return np.array([[np.cos(q), -np.sin(q), 0, x], [np.sin(q), np.cos(q), 0, y], [0, 0, 1, z], [0, 0, 0, 1]])
     H1 = TransZ(q[0], 0, 0, 0.333)
-    H2 = np.dot(RotX(-np.pi/2), RotZ(q[1]))
-    H3 = np.dot(TransX(np.pi/2, 0, -0.316, 0), RotZ(q[2]))
-    H4 = np.dot(TransX(np.pi/2, 0.0825, 0, 0), RotZ(q[3]))
-    H5 = np.dot(TransX(-np.pi/2, -0.0825, 0.384, 0), RotZ(q[4]))
-    H6 = np.dot(RotX(np.pi/2), RotZ(q[5]))
-    H7 = np.dot(TransX(np.pi/2, 0.088, 0, 0), RotZ(q[6]))
-    H_panda_hand = TransZ(-np.pi/4, 0, 0, 0.2105)
+    H2 = np.dot(RotX(-np.pi / 2), RotZ(q[1]))
+    H3 = np.dot(TransX(np.pi / 2, 0, -0.316, 0), RotZ(q[2]))
+    H4 = np.dot(TransX(np.pi / 2, 0.0825, 0, 0), RotZ(q[3]))
+    H5 = np.dot(TransX(-np.pi / 2, -0.0825, 0.384, 0), RotZ(q[4]))
+    H6 = np.dot(RotX(np.pi / 2), RotZ(q[5]))
+    H7 = np.dot(TransX(np.pi / 2, 0.088, 0, 0), RotZ(q[6]))
+    H_panda_hand = TransZ(-np.pi / 4, 0, 0, 0.2105)
     H = np.linalg.multi_dot([H1, H2, H3, H4, H5, H6, H7, H_panda_hand])
     H_no_hand = np.linalg.multi_dot([H1, H2, H3, H4, H5, H6, H7])
-    return np.concatenate((H[:,3][:3], rotationMatrixToEulerAngles(H_no_hand[:3,:3])), axis = None)
+    return np.concatenate((H[:, 3][:3], rotationMatrixToEulerAngles(H_no_hand[:3, :3])), axis=None)
+
 
 # Checks if a matrix is a valid rotation matrix.
-def isRotationMatrix(R) :
+def isRotationMatrix(R):
     Rt = np.transpose(R)
     shouldBeIdentity = np.dot(Rt, R)
-    I = np.identity(3, dtype = R.dtype)
-    n = np.linalg.norm(I - shouldBeIdentity)
+    Id = np.identity(3, dtype=R.dtype)
+    n = np.linalg.norm(Id - shouldBeIdentity)
     return n < 1e-6
 
 
 # Calculates rotation matrix to euler angles
 # The result is the same as MATLAB except the order
 # of the euler angles ( x and z are swapped ).
-def rotationMatrixToEulerAngles(R) :
+def rotationMatrixToEulerAngles(R):
 
     assert(isRotationMatrix(R))
 
-    sy = math.sqrt(R[0,0] * R[0,0] +  R[1,0] * R[1,0])
+    sy = math.sqrt(R[0, 0] * R[0, 0] + R[1, 0] * R[1, 0])
 
     singular = sy < 1e-6
 
-    if  not singular :
-        x = math.atan2(R[2,1] , R[2,2])
-        y = math.atan2(-R[2,0], sy)
-        z = math.atan2(R[1,0], R[0,0])
-    else :
-        x = math.atan2(-R[1,2], R[1,1])
-        y = math.atan2(-R[2,0], sy)
+    if not singular:
+        x = math.atan2(R[2, 1], R[2, 2])
+        y = math.atan2(-R[2, 0], sy)
+        z = math.atan2(R[1, 0], R[0, 0])
+    else:
+        x = math.atan2(-R[1, 2], R[1, 1])
+        y = math.atan2(-R[2, 0], sy)
         z = 0
 
     return np.array([x, y, z])
 
 
 def send2hololens(goals, belief, coord_curr, initialized):
-    #print(belief)
-    #print(xyz_curr)
+    # print(belief)
+    # print(xyz_curr)
     if initialized:
         with open('robotUpdate.txt', 'w') as f:
             f.write(f"{coord_curr[0]}\t{coord_curr[1]}\t{coord_curr[2]}\t{coord_curr[3]}\t{coord_curr[4]}\t{coord_curr[5]}\n")
@@ -181,8 +187,6 @@ def send2hololens(goals, belief, coord_curr, initialized):
                     f.write(f"{belief_x}\n")
                 else:
                     f.write(f"{belief_x}")
-
-
     else:
         with open('robotInit.txt', 'w') as f:
             f.write(f"{coord_curr[0]}\t{coord_curr[1]}\t{coord_curr[2]}\t{coord_curr[3]}\t{coord_curr[4]}\t{coord_curr[5]}\tCurrent Location\n")
@@ -202,7 +206,7 @@ def main():
 
     print('[*] Connecting to low-level controller...')
 
-    conn = connect2robot(PORT_robot) #connect to other computer
+    conn = connect2robot(PORT_robot)  # connect to other computer
     conn_gripper = connect2robot(PORT_gripper)
 
     # readState -> give you a dictionary with things like joint values, velocity, torque
@@ -217,9 +221,9 @@ def main():
 
     print('[*] Ready for a teleoperation...')
 
-    #Set up the initial robotInit.txt file
+    # Set up the initial robotInit.txt file
     send2hololens(goals, belief, coord_home, False)
-    #Start the Web Server
+    # Start the Web Server
     print('[*] Starting Server')
     server = subprocess.Popen(["python3", "server.py"])
     print('[*] Server Ready')
@@ -227,8 +231,6 @@ def main():
     start_time = datetime.now()
 
     while True:
-
-
         # read the current state of the robot + the xyz position
         state = readState(conn)
         coord_curr = np.asarray(joint2pose(state["q"]))
@@ -247,7 +249,7 @@ def main():
 
         if stop:
             os.killpg(os.getpgid(server.pid), signal.SIGTERM)
-            #Run this command if the server doesnt stop correctly to find process you need to kill: lsof -i :8010
+            # Run this command if the server doesnt stop correctly to find process you need to kill: lsof -i :8010
             return_home(conn, home)
             print("[*] Done!")
             return True
@@ -260,7 +262,7 @@ def main():
         dist_goals_star = [np.linalg.norm(goal_coord - coord_home) for goal_coord in goals]
         belief = [np.exp(-BETA * (dist_start + dist_goal)) / np.exp(-BETA * dist_goal_star) for dist_goal, dist_goal_star in zip(dist_goals, dist_goals_star)]
         belief /= np.sum(belief)
-        print(belief) # This is the robot's current confidence
+        print(belief)  # This is the robot's current confidence
 
         xdot_g = [np.clip(goal - coord_curr, -0.05, 0.05) for goal in goals]
         # action_difference = np.abs(xdot_g1 - xdot_g2) # WHAT TO DO HERE??? not used elsewhere
@@ -298,7 +300,7 @@ def main():
             xdot[5] = 2 * action_scale * z[2]
 
         if (datetime.now() - lastsend) > sendfreq:
-            #print("[*] Sending Updated Coordinates and Beliefs")
+            # print("[*] Sending Updated Coordinates and Beliefs")
             send2hololens(goals, belief, coord_curr, True)
             lastsend = datetime.now()
 
@@ -307,9 +309,9 @@ def main():
         # send our final command to robot
         send2robot(conn, qdot)
 
-        #every so many iteration (every so many second 0.1)
-        #data = [].append([joint positon, belief, input, ....])
-        #when they press start , pickle.save(data)
+        # every so many iteration (every so many second 0.1)
+        # data = [].append([joint positon, belief, input, ....])
+        # when they press start , pickle.save(data)
 
 
 if __name__ == "__main__":
