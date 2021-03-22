@@ -30,6 +30,7 @@ teleop_task2.py is set up to run the second task of the user study. This task wi
 
 teleop_task2.py functionality:
 * Discrete trajectories (switch to Cartesian to prevent favoring random trajectories, debug)
+
 To be implemented
 * Assistance
 * Haptics
