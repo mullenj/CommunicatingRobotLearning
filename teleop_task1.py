@@ -10,8 +10,12 @@ from return_home import return_home
 np.set_printoptions(suppress=True)
 
 """
- * a minimal script for teleoperating the robot using a joystick
+ * a script for teleoperating the robot using a joystick in task 1 of the senior
+ * design user study. It sets up four goals in two locations with two possible
+ * orientations. The user must adapt to the injected rotation to correct it or
+ * the code will latch onto a goal that the user does not intend.
  * Dylan Losey, September 2020
+ * James Mullen, March 2021
 
  * To run:
  [1] in one terminal:
@@ -20,6 +24,7 @@ np.set_printoptions(suppress=True)
  [2] in a second terminal:
     navigate to ~/libfranka/build
     run ./collab/velocity_control
+    run ./collab/grasp_control
 """
 home = np.asarray([0.709588, -0.446052, 0.020361, -2.536814, -1.168517, 0.98433, -0.128633])  # real home
 # hard coded three goal positions

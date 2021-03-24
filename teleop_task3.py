@@ -3,7 +3,8 @@ import numpy as np
 import math
 import pygame
 import os
-from datetime import datetime, timedelta
+import sys
+import time
 import subprocess
 import signal
 from return_home import return_home
@@ -31,7 +32,7 @@ goal2 = np.asarray([0.634, -0.457, 0.318, 1.59, 0.766, 0.058])  # Bottom Shelf f
 # goal3 = np.asarray([0.627, -0.459, 0.629, 1.59, -0.795, 0.027])  # Top Shelf sideways
 # goal4 = np.asarray([0.634, -0.457, 0.318, 1.59, -0.795, 0.027])  # Bottom Shelf sideways
 goals = [goal1, goal2] # , goal3, goal4]
-sendfreq = timedelta(seconds=0.1)
+sendfreq = 0.1
 
 
 class Joystick(object):
@@ -214,8 +215,16 @@ def main():
     # joint2pose -> forward kinematics: convert the joint position to the xyz position of the end-effector
     coord_home = np.asarray(joint2pose(state["q"]))
     # print(coord_home)
-    belief = np.asarray([0.5, 0.5])
-    BETA = 6
+    belief_dir = sys.argv[1]
+    if belief_dir == 'top':
+        belief = np.asarray([0.52, 0.48])
+    elif belief_dir == 'bot':
+        belief = np.asarray([0.48, 0.52])
+    else:
+        print("[*] Please input a valid prior ('top' or 'bot')")
+        sys.exit()
+    prior = np.copy(belief)
+    BETA = 3
     start_mode = True
     gripper_closed = False
 
@@ -225,10 +234,11 @@ def main():
     send2hololens(goals, belief, coord_home, False)
     # Start the Web Server
     print('[*] Starting Server')
-    server = subprocess.Popen(["python3", "server.py"])
+    # server = subprocess.Popen(["python3", "server.py"])
     print('[*] Server Ready')
-    lastsend = datetime.now() - sendfreq
-    start_time = datetime.now()
+    lastsend = time.time() - sendfreq
+    start_time = time.time()
+    belief_time = time.time()
 
     while True:
         # read the current state of the robot + the xyz position
@@ -239,16 +249,17 @@ def main():
 
         # get the humans joystick input
         z, mode, grasp, stop = interface.input()
-        if mode and (datetime.now() - start_time > timedelta(seconds=0.2)):
+        if mode and (time.time() - start_time > 0.2):
             start_mode = not start_mode
-            start_time = datetime.now()
-        if grasp and (datetime.now() - start_time > timedelta(seconds=0.2)):
+            start_time = time.time()
+            belief_time = time.time()
+        if grasp and (time.time() - start_time > 0.2):
             gripper_closed = not gripper_closed
-            start_time = datetime.now()
+            start_time = time.time()
             send2gripper(conn_gripper)
 
         if stop:
-            os.killpg(os.getpgid(server.pid), signal.SIGTERM)
+            # os.killpg(os.getpgid(server.pid), signal.SIGTERM)
             # Run this command if the server doesnt stop correctly to find process you need to kill: lsof -i :8010
             return_home(conn, home)
             print("[*] Done!")
@@ -258,22 +269,38 @@ def main():
         # belief = probability that the human wants each goal
         # belief = [confidence in goal 1, confidence in goal 2]
         dist_start = np.linalg.norm(coord_curr - coord_home)
+        # Could the below be done outside of comprehensions in numpy itself?
         dist_goals = [np.linalg.norm(goal_coord - coord_curr) for goal_coord in goals]
         dist_goals_star = [np.linalg.norm(goal_coord - coord_home) for goal_coord in goals]
         belief = [np.exp(-BETA * (dist_start + dist_goal)) / np.exp(-BETA * dist_goal_star) for dist_goal, dist_goal_star in zip(dist_goals, dist_goals_star)]
+        belief = belief*np.asarray(prior)
         belief /= np.sum(belief)
-        print(belief)  # This is the robot's current confidence
+        if not start_mode and (time.time() - belief_time > 1.0):
+            # print("in update")
+            prior = np.copy(belief)
+            belief_time = time.time()
+        # print(belief)  # This is the robot's current confidence
 
         xdot_g = [np.clip(goal - coord_curr, -0.05, 0.05) for goal in goals]
         # action_difference = np.abs(xdot_g1 - xdot_g2) # WHAT TO DO HERE??? not used elsewhere
 
+        # Critial States implementation where cost is described as dist(s, g)
+        # where s is the state and g is the goal location
+        s_prime = xdot_g + coord_curr
+        expected_cost = [np.linalg.norm(goal_coord - s_prime_x) * belief_x for
+                         goal_coord, belief_x, s_prime_x in zip(goals, belief, s_prime)]
+        if abs(expected_cost[0]-expected_cost[1]) > 0.17:
+            print("Critical State")
+            print(abs(expected_cost[0]-expected_cost[1]))
+            print(belief)
+
         # human inputs converted to dx, dy, dz velocities in the end-effector space
         xdot = [0]*6
         which_goal = np.argmax(belief)
-        if max(belief) < 0.8:
-            xdot[0] = action_scale * z[0] + xdot_g[which_goal][0]
-            xdot[1] = action_scale * -z[1] + xdot_g[which_goal][1]
-            xdot[2] = action_scale * -z[2] + xdot_g[which_goal][2]
+        if max(belief) < 0.95:
+            xdot[0] = action_scale * z[0] + xdot_g[which_goal][0] * 0.5
+            xdot[1] = action_scale * -z[1] + xdot_g[which_goal][1] * 0.5
+            xdot[2] = action_scale * -z[2] + xdot_g[which_goal][2] * 0.5
         else:
             xdot[0] = xdot_g[which_goal][0]
             xdot[1] = xdot_g[which_goal][1]
@@ -282,10 +309,10 @@ def main():
         if start_mode:
             xdot = [0]*6
 
-        if (datetime.now() - lastsend) > sendfreq:
+        if (time.time() - lastsend) > sendfreq:
             # print("[*] Sending Updated Coordinates and Beliefs")
             send2hololens(goals, belief, coord_curr, True)
-            lastsend = datetime.now()
+            lastsend = time.time()
 
         # convert this command to joint space
         qdot = xdot2qdot(xdot, state)

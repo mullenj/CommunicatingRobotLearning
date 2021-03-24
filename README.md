@@ -11,9 +11,7 @@ The functionality that needs to be added includes:
 * Find places to call Haptic Functions from haptic_util.py (Teleop.py)
 
 To connect to the haptic device, the procedure is as follows:
-1. x
-2. y
-3. z
+1. sudo rfcomm connect /dev/rfcomm0 7C:9E:BD:D8:C2:02 1 &
 
 teleop_task1.py is set up to run the first task of the user study. This task will be the simplest of the three. It begins with a cup in the robots grasper mechanism and operates similarly to the above example. As the person gets closer to a goal location the robot will begin assisting. We want the robot to begin tilting the cup to feign ignorance, from which the human needs to correct the rotation to make the robot select the correct goal.
 
@@ -41,9 +39,14 @@ teleop_task3.py is set up to run the third task of the user study. This task wil
 
 teleop_task3.py functionality:
 * Two goals, one high and one low (no tilting at the moment)
+* Initialize to favor one of the two, pseudo-randomly
+* Implemented Critical States (need to be tuned)
 
 To be implemented
 * Haptics
-* Initialize to favor one of the two, pseudo-randomly
 
-Functionality needs to be added to all tasks to save off data prior to conducting the user study
+**Functionality needs to be added to all tasks to save off data prior to conducting the user study**
+
+Bugs
+* Sometimes objects get double created in the hololens ruining everything
+* Gripper opens and closes immediately or vice versa
