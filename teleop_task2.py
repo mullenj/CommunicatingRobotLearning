@@ -210,7 +210,9 @@ def send2hololens(belief, coord_curr, initialized, waypoints):
                 f.write(f"{goal[0]}\t{goal[1]}\t{goal[2]}\tGoal {count + 1}\t{belief_x}\n")
             for count_1, point in enumerate(points):
                 for count_2, p in enumerate(point):
-                    if count_1 < len(points) - 1 or count_2 < len(point) - 1:
+                    if count_2 == 0 or count_2 == 4:
+                        continue
+                    elif count_1 < len(points) - 1 or count_2 < len(point) - 2:
                         f.write(f"traj\t{count_1 + 1}\t{p[0]}\t{p[1]}\t{p[2]}\n")
                     else:
                         f.write(f"traj\t{count_1 + 1}\t{p[0]}\t{p[1]}\t{p[2]}")

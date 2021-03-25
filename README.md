@@ -10,8 +10,21 @@ The functionality that needs to be added includes:
 * ~~Get color gradient working~~
 * Find places to call Haptic Functions from haptic_util.py (Teleop.py)
 
-To connect to the haptic device, the procedure is as follows:
-1. sudo rfcomm connect /dev/rfcomm0 7C:9E:BD:D8:C2:02 1 &
+To connect to the haptic device, the command is as follows:
+'''
+sudo rfcomm connect /dev/rfcomm0 7C:9E:BD:D8:C2:02 1 &
+'''
+To Debug try the following:
+1. sudo killall rfcomm
+2. sudo rfcomm release 0
+3. Redownload Arduino Code
+
+To Restart after hangup: not working
+'''
+sudo killall rfcomm
+sudo rfcomm release 0
+sudo rfcomm bind 0 7C:9E:BD:D8:C2:02
+'''
 
 teleop_task1.py is set up to run the first task of the user study. This task will be the simplest of the three. It begins with a cup in the robots grasper mechanism and operates similarly to the above example. As the person gets closer to a goal location the robot will begin assisting. We want the robot to begin tilting the cup to feign ignorance, from which the human needs to correct the rotation to make the robot select the correct goal.
 
@@ -48,5 +61,6 @@ To be implemented
 **Functionality needs to be added to all tasks to save off data prior to conducting the user study**
 
 Bugs
-* Sometimes objects get double created in the hololens ruining everything
-* Gripper opens and closes immediately or vice versa
+* Sometimes objects get double created in the hololens ruining everything (maybe fixed)
+* Buttons get double triggered
+* Send white threshold

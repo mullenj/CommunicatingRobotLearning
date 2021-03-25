@@ -182,20 +182,20 @@ def send2hololens(goals, belief, coord_curr, initialized):
     # print(xyz_curr)
     if initialized:
         with open('robotUpdate.txt', 'w') as f:
-            f.write(f"{coord_curr[0]}\t{coord_curr[1]}\t{coord_curr[2]}\t{coord_curr[3]}\t{coord_curr[4]}\t{coord_curr[5]}\n")
-            for count, (goal, belief_x) in enumerate(zip(goals, belief)):
+            f.write(f"{coord_curr[0]}\t{coord_curr[1]}\t{coord_curr[2]}\n")
+            for count, belief_x in enumerate(belief):
                 if count < len(belief) - 1:
                     f.write(f"{belief_x}\n")
                 else:
                     f.write(f"{belief_x}")
     else:
         with open('robotInit.txt', 'w') as f:
-            f.write(f"{coord_curr[0]}\t{coord_curr[1]}\t{coord_curr[2]}\t{coord_curr[3]}\t{coord_curr[4]}\t{coord_curr[5]}\tCurrent Location\n")
+            f.write(f"{coord_curr[0]}\t{coord_curr[1]}\t{coord_curr[2]}\n")
             for count, (goal, belief_x) in enumerate(zip(goals, belief)):
                 if count < len(belief) - 1:
-                    f.write(f"{goal[0]}\t{goal[1]}\t{goal[2]}\t{goal[3]}\t{goal[4]}\t{goal[5]}\tGoal {count + 1}\t{belief_x}\n")
+                    f.write(f"{goal[0]}\t{goal[1]}\t{goal[2]}\tGoal {count + 1}\t{belief_x}\n")
                 else:
-                    f.write(f"{goal[0]}\t{goal[1]}\t{goal[2]}\t{goal[3]}\t{goal[4]}\t{goal[5]}\tGoal {count + 1}\t{belief_x}")
+                    f.write(f"{goal[0]}\t{goal[1]}\t{goal[2]}\tGoal {count + 1}\t{belief_x}")
 
 
 def main():
@@ -234,7 +234,7 @@ def main():
     send2hololens(goals, belief, coord_home, False)
     # Start the Web Server
     print('[*] Starting Server')
-    # server = subprocess.Popen(["python3", "server.py"])
+    server = subprocess.Popen(["python3", "server.py"])
     print('[*] Server Ready')
     lastsend = time.time() - sendfreq
     start_time = time.time()
@@ -259,7 +259,7 @@ def main():
             send2gripper(conn_gripper)
 
         if stop:
-            # os.killpg(os.getpgid(server.pid), signal.SIGTERM)
+            os.killpg(os.getpgid(server.pid), signal.SIGTERM)
             # Run this command if the server doesnt stop correctly to find process you need to kill: lsof -i :8010
             return_home(conn, home)
             print("[*] Done!")
@@ -287,9 +287,10 @@ def main():
         # Critial States implementation where cost is described as dist(s, g)
         # where s is the state and g is the goal location
         s_prime = xdot_g + coord_curr
-        expected_cost = [np.linalg.norm(goal_coord - s_prime_x) * belief_x for
-                         goal_coord, belief_x, s_prime_x in zip(goals, belief, s_prime)]
-        if abs(expected_cost[0]-expected_cost[1]) > 0.17:
+
+        expected_cost = [sum(np.linalg.norm(goals - s_prime_x, axis = 1)*belief)
+                         for s_prime_x in s_prime]
+        if abs(expected_cost[0]-expected_cost[1]) > 0.009:
             print("Critical State")
             print(abs(expected_cost[0]-expected_cost[1]))
             print(belief)
