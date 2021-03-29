@@ -62,5 +62,6 @@ To be implemented
 
 Bugs
 * Sometimes objects get double created in the hololens ruining everything (maybe fixed)
-* Buttons get double triggered
-* Send white threshold
+* Buttons get double triggered (maybe fixed)
+* Send white threshold (done)
+* Graphics Move after setting Hololens down
