@@ -1,7 +1,9 @@
 import serial
 import platform
+# import time
+# import threading
 
-commands = {'all_on': 'A', 'left_on': 'L', 'right_on': 'R', 'top_on': 'T', 'bottom_on': 'B', 'tense': 'O', 'relax': 'P', 'circular': 'C', 'striped': 'S', 'LED': 'H'}
+commands = {'all_on': 'A', 'horizontal': 'L', 'right_on': 'R', 'vertical': 'T', 'bottom_on': 'B', 'tense': 'O', 'relax': 'P', 'circular': 'C', 'striped': 'S', 'LED': 'H'}
 
 def initialize():
     # Define COM Serial Port
@@ -28,12 +30,38 @@ def initialize():
 # 'LED' - Turns LED_BUILTIN on
 
 def haptic_command(conn, command, PW, duration):
-    commands = {'all_on': 'A', 'left_on': 'L', 'right_on': 'R', 'top_on': 'T', 'bottom_on': 'B', 'tense': 'O', 'relax': 'P', 'circular': 'C', 'striped': 'S', 'LED': 'H'}
+    commands = {'all_on': 'A', 'horizontal': 'L', 'right_on': 'R', 'vertical': 'T', 'bottom_on': 'B', 'tense': 'O', 'relax': 'P', 'circular': 'C', 'striped': 'S', 'LED': 'H'}
     if command in commands.keys() and PW >= 0 and PW < 10: # Check Input
         conn.write(str.encode(commands[command] + str(PW) + str(duration) + '\n')) # Send Command
 
 def close(conn):
     conn.close()
+
+# def vert(conn):
+#     th = threading.Thread(target = vert_fun, args = (conn,))
+#     th.start()
+#     th.join()
+#
+# def vert_fun(conn):
+#     haptic_command(conn, 'top_on', 2, 1)
+#     time.sleep(1)
+#     haptic_command(conn, 'bottom_on', 2, 1)
+#     time.sleep(1)
+#     haptic_command(conn, 'top_on', 2, 1)
+#     time.sleep(1)
+#     haptic_command(conn, 'bottom_on', 2, 1)
+#     time.sleep(1)
+#     haptic_command(conn, 'top_on', 2, 1)
+#     time.sleep(1)
+#     haptic_command(conn, 'bottom_on', 2, 1)
+#     time.sleep(1)
+#     haptic_command(conn, 'top_on', 2, 1)
+#     time.sleep(1)
+#     haptic_command(conn, 'bottom_on', 2, 1)
+#     time.sleep(1)
+#     haptic_command(conn, 'top_on', 2, 1)
+#     time.sleep(1)
+#     haptic_command(conn, 'bottom_on', 2, 1)
 
 # Test Code
 # ---------
@@ -45,7 +73,7 @@ def main():
         user_input = input(" >>  ")
         if user_input == 'Quit':
             break
-        haptic_command(conn, user_input, 3, 5)
+        haptic_command(conn, user_input, 3, 1)
     close(conn)
 
 

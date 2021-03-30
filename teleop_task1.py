@@ -5,6 +5,7 @@ import subprocess
 import signal
 from return_home import return_home
 import teleop_utils as utils
+import hapticcode.haptic_control as haptic
 np.set_printoptions(suppress=True)
 
 """
@@ -64,6 +65,10 @@ def main():
     PORT_gripper = 8081
     action_scale = 0.05
     interface = utils.Joystick()
+    print('[*] Connecting to haptic device...')
+    hapticconn = haptic.initialize()
+    rot_triggered = False
+    z_triggered = False
 
     print('[*] Connecting to low-level controller...')
 
@@ -124,42 +129,65 @@ def main():
         dist_goals_star = [np.linalg.norm(goal_coord - coord_home) for goal_coord in goals]
         belief = [np.exp(-BETA * (dist_start + dist_goal)) / np.exp(-BETA * dist_goal_star) for dist_goal, dist_goal_star in zip(dist_goals, dist_goals_star)]
         belief /= np.sum(belief)
-        print(belief)  # This is the robot's current confidence
+        # print(belief)  # This is the robot's current confidence
 
-        xdot_g = [np.clip(goal - coord_curr, -0.05, 0.05) for goal in goals]
-        # action_difference = np.abs(xdot_g1 - xdot_g2) # WHAT TO DO HERE??? not used elsewhere
-
+        # Individual and blended actions
+        a_star = [np.clip(goal - coord_curr, -0.05, 0.05) for goal in goals]
+        a_star = [action_scale * a / np.linalg.norm(a) if np.linalg.norm(a) > action_scale else a for a in a_star]
+        action = np.sum(a_star * belief[:, None], axis = 0)
+        if np.linalg.norm(action) > action_scale:
+            action = action_scale * action / np.linalg.norm(action)
         # human inputs converted to dx, dy, dz velocities in the end-effector space
+        # xdot = [0]*6
+        alpha = 1
+        a = (1-alpha) * action_scale * np.pad(np.asarray(z), (0, 3), 'constant') + alpha * np.asarray(action)
+        a[4] = a[4] / 0.15
+        # Critical States
+        C = sum([b*(utils.cost_to_go(coord_curr, action, goal_x) - utils.cost_to_go(coord_curr, a_star_x, goal_x)) for b, a_star_x, goal_x in zip(belief, a_star, goals)])
 
-        xdot = [0]*6
+        id = np.identity(6)
+        Quest = [[-0.1*id[:, i], 0.1*id[:, i]] for i in range(6)]
+        Ix = [utils.info_gain(Quest_x, coord_curr, goals, belief) for Quest_x in Quest]
+        print(C, np.argmax(Ix))
 
-        if translation_mode:
-            if max(belief) < 0.3:
-                xdot[0] = action_scale * z[0]
-                xdot[1] = action_scale * -z[1]
-                xdot[2] = action_scale * -z[2]
-                xdot[4] = action_scale * -3 * z[1]
-            elif max(belief) < latch_point:
-                which_goal = np.argmax(belief)
-                scalar = (max(belief) - 0.3)/(0.45*action_scale)
-                xdot[0] = action_scale * (z[0] + xdot_g[which_goal][0]*scalar)
-                xdot[1] = action_scale * (-z[1] + xdot_g[which_goal][1]*scalar)
-                xdot[2] = action_scale * (-z[2] + xdot_g[which_goal][2]*scalar)
-                xdot[3] = action_scale * (xdot_g[which_goal][3]*scalar)
-                xdot[4] = action_scale * (z[1] * -3 + xdot_g[which_goal][4]*scalar)
-                xdot[5] = action_scale * (xdot_g[which_goal][5]*scalar)
-            else:
-                which_goal = np.argmax(belief)
-                xdot[0] = xdot_g[which_goal][0]
-                xdot[1] = xdot_g[which_goal][1]
-                xdot[2] = xdot_g[which_goal][2]
-                xdot[3] = 4 * xdot_g[which_goal][3]
-                xdot[4] = 4 * xdot_g[which_goal][4]
-                xdot[5] = 4 * xdot_g[which_goal][5]
-        else:
-            xdot[3] = 2 * action_scale * z[0]
-            xdot[4] = 2 * action_scale * z[1]
-            xdot[5] = 2 * action_scale * z[2]
+        # Naive implementation of Haptics
+        if C > 0.017:
+            if np.argmax(Ix) == 2:
+                print("Critical State Z")
+                if not z_triggered:
+                    haptic.haptic_command(hapticconn, 'vertical', 3, 1)
+                    z_triggered = True
+            elif np.argmax(Ix) > 2:
+                print("Critical State Rotation")
+                if not rot_triggered:
+                    haptic.haptic_command(hapticconn, 'circular', 3, 1)
+                    rot_triggered = True
+
+        # if translation_mode:
+        #     if max(belief) < 0.3:
+        #         xdot[0] = action_scale * z[0]
+        #         xdot[1] = action_scale * -z[1]
+        #         xdot[2] = action_scale * -z[2]
+        #         xdot[4] = action_scale * -3 * z[1]
+        #     elif max(belief) < latch_point:
+        #         scalar = (max(belief) - 0.3)/(0.45*action_scale)
+        #         xdot[0] = action_scale * (z[0] + action[0]*scalar)
+        #         xdot[1] = action_scale * (-z[1] + action[1]*scalar)
+        #         xdot[2] = action_scale * (-z[2] + action[2]*scalar)
+        #         xdot[3] = action_scale * (action[3]*scalar)
+        #         xdot[4] = action_scale * (z[1] * -3 + action[4]*scalar)
+        #         xdot[5] = action_scale * (action[5]*scalar)
+        #     else:
+        #         xdot[0] = action[0]
+        #         xdot[1] = action[1]
+        #         xdot[2] = action[2]
+        #         xdot[3] = 4 * action[3]
+        #         xdot[4] = 4 * action[4]
+        #         xdot[5] = 4 * action[5]
+        # else:
+        #     xdot[3] = 2 * action_scale * z[0]
+        #     xdot[4] = 2 * action_scale * z[1]
+        #     xdot[5] = 2 * action_scale * z[2]
 
         if (time.time() - lastsend) > sendfreq:
             # print("[*] Sending Updated Coordinates and Beliefs")
@@ -167,7 +195,7 @@ def main():
             lastsend = time.time()
 
         # convert this command to joint space
-        qdot = utils.xdot2qdot(xdot, state)
+        qdot = utils.xdot2qdot(a, state)
         # send our final command to robot
         utils.send2robot(conn, qdot)
 

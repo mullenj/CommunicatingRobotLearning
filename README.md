@@ -34,8 +34,6 @@ teleop_task1.py functionality:
 * Favoring tilted end goal (might want better implementation)
 * Parameter tuning (might want to lower beta? only requires one really good correction to favor straight and the assistance helps a lot)
 * Gripper
-
-To be implemented
 * Haptics
 
 teleop_task2.py is set up to run the second task of the user study. This task will involve the user maneuvering an object towards a goal with an obstacle in the way of the robots motion. The robot now needs to learn that it has to avoid this obstacle.

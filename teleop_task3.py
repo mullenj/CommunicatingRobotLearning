@@ -10,8 +10,12 @@ import hapticcode.haptic_control as haptic
 np.set_printoptions(suppress=True)
 
 """
- * a minimal script for teleoperating the robot using a joystick
+ * a script for teleoperating the robot using a joystick in task 3 of the senior
+ * design user study. It is set up to have two final location goals and the
+ * study operator sets which goal it prefers. When hitting a critical state, the
+ * user is notified to provide corrections if necessary.
  * Dylan Losey, September 2020
+ * James Mullen, March 2021
 
  * To run:
  [1] in one terminal:
@@ -20,6 +24,7 @@ np.set_printoptions(suppress=True)
  [2] in a second terminal:
     navigate to ~/libfranka/build
     run ./collab/velocity_control
+    run ./collab/grasp_control
 """
 home = np.asarray([0.709588, -0.446052, 0.020361, -2.536814, -1.168517, 0.98433, -0.128633])  # real home
 goal1 = np.asarray([0.627, -0.459, 0.629])  # Top Shelf flat
@@ -159,7 +164,7 @@ def main():
             print(abs(expected_cost[0]-expected_cost[1]))
             print(belief)
             if not haptic_triggered:
-                haptic.haptic_command(hapticconn, 'all_on', 2, 1)
+                haptic.haptic_command(hapticconn, 'horizontal', 3, 1)
                 haptic_triggered = True
 
         # human inputs converted to dx, dy, dz velocities in the end-effector space

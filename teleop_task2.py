@@ -134,38 +134,60 @@ def main():
         belief_denominator = sum(np.exp(-BETA * np.asarray(dist_trajectories)))
         belief = [np.exp(-BETA * dist_trajectory) / belief_denominator for dist_trajectory in dist_trajectories]
         belief /= np.sum(belief)
-        print(belief) # This is the robot's current confidence
+        # print(belief) # This is the robot's current confidence
 
         # get the next location to navigate towards
-        which_goal = np.argmax(belief)
-        try:
-            next_loc = trajectories[which_goal][np.argmin(np.linalg.norm(trajectories[which_goal] - coord_curr, axis = 1)) + 10]
-            action = proportional_gain * (next_loc - coord_curr)
-        except:
-            print("Exception")
-            action = (0, 0, 0)
-        finally:
-            if (coord_curr[2] < 0.075):
-                action = (0, 0, 0)
+        def next_loc(trajectory, xyz):
+            try:
+                next_loc = trajectory[np.argmin(np.linalg.norm(trajectory - xyz, axis = 1)) + 10]
+                return proportional_gain * (next_loc - xyz)
+            except:
+                print("Exception")
+                return (0, 0, 0)
+            finally:
+                if (coord_curr[2] < 0.075):
+                    return (0, 0, 0)
 
+        a_star = [next_loc(trajectory, coord_curr) for trajectory in trajectories]
+        a_star = [action_scale * a / np.linalg.norm(a) if np.linalg.norm(a) > action_scale else a for a in a_star]
+        action = np.sum(a_star * belief[:, None], axis = 0)
+        # action = a_star[np.argmax(belief)]
+        if np.linalg.norm(action) > action_scale:
+            action = action_scale * action / np.linalg.norm(action)
         if start_mode:
             action = (0, 0, 0)
 
+        # Critical States (How to do this with trajectories as the goals)
+        # One way: instead of feading goal feed closest point to s + a
+        G = [min(np.linalg.norm(trajectory - (coord_curr + action), axis = 1)) for trajectory in trajectories]
+        C = sum([b*(utils.cost_to_go(coord_curr, action, goal_x) - utils.cost_to_go(coord_curr, a_star_x, goal_x)) for b, a_star_x, goal_x in zip(belief, a_star, G)])
+        print(C)
+        # id = np.identity(3)
+        # Quest = [[-0.1*id[:, i], 0.1*id[:, i]] for i in range(3)]
+        # Ix = [utils.info_gain(Quest_x, coord_curr, goals, belief) for Quest_x in Quest]
+
+        # human inputs converted to dx, dy, dz velocities in the end-effector space
+        # xdot = [0]*6
+        alpha = 1
+        z[1] = -z[1]
+        z[2] = -z[2]
+        a = (1-alpha) * action_scale * np.asarray(z) + alpha * np.asarray(action)
+
         # Navigate
-        xdot = [0]*6
-        if max(belief) < 0.3:
-            xdot[0] = action_scale * z[0] + 0.5 * action[0]
-            xdot[1] = action_scale * -z[1] + 0.5 * action[1]
-            xdot[2] = action_scale * -z[2] + 0.5 * action[2]
-        elif max(belief) < latch_point:
-            scalar = 1 + (max(belief) - 0.3)/(0.25)
-            xdot[0] = action_scale * z[0] + action[0] * scalar
-            xdot[1] = action_scale * -z[1] + action[1] * scalar
-            xdot[2] = action_scale * -z[2] + action[2] * scalar
-        else:
-            xdot[0] = 2 * action[0]
-            xdot[1] = 2 * action[1]
-            xdot[2] = 2 * action[2]
+        # xdot = [0]*6
+        # if max(belief) < 0.3:
+        #     xdot[0] = action_scale * z[0] + 0.5 * action[0]
+        #     xdot[1] = action_scale * -z[1] + 0.5 * action[1]
+        #     xdot[2] = action_scale * -z[2] + 0.5 * action[2]
+        # elif max(belief) < latch_point:
+        #     scalar = 1 + (max(belief) - 0.3)/(0.25)
+        #     xdot[0] = action_scale * z[0] + action[0] * scalar
+        #     xdot[1] = action_scale * -z[1] + action[1] * scalar
+        #     xdot[2] = action_scale * -z[2] + action[2] * scalar
+        # else:
+        #     xdot[0] = 2 * action[0]
+        #     xdot[1] = 2 * action[1]
+        #     xdot[2] = 2 * action[2]
 
         if (time.time() - lastsend) > sendfreq:
             # print("[*] Sending Updated Coordinates and Beliefs")
@@ -173,7 +195,7 @@ def main():
             lastsend = time.time()
 
         # convert this command to joint space
-        qdot = utils.xdot2qdot(xdot, state)
+        qdot = utils.xdot2qdot(np.pad(np.asarray(a), (0, 3), 'constant'), state)
         # send our final command to robot
         utils.send2robot(conn, qdot)
 
