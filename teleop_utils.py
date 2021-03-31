@@ -194,25 +194,24 @@ def rotationMatrixToEulerAngles(R):
     return np.array([x, y, z])
 
 def dist(x, y):
-    return np.linalg.norm(y - x)
+    return np.linalg.norm(x - y)
 
 def cost_to_go(s, a, g):
     return dist(s + a, g)
 
-def boltzmann(q, Quest, s, g):
-    beta_h = 10
-    p = np.exp(-beta_h * cost_to_go(s, q, g))
-    p1 = np.exp(-beta_h * cost_to_go(s, Quest[0], g))
-    p2 = np.exp(-beta_h * cost_to_go(s, Quest[1], g))
+def boltzmann(beta, u, U, s, g):
+    p = np.exp(-beta * cost_to_go(s, u, g))
+    p1 = np.exp(-beta * cost_to_go(s, U[0], g))
+    p2 = np.exp(-beta * cost_to_go(s, U[1], g))
     return p / (p1 + p2)
 
-def info_gain(Quest, s, G, b):
+def info_gain(beta, U, s, G, b):
     Qinfo = 0
-    for q in Quest:
+    for u in U:
         Z = 0
         for x, g in enumerate(G):
-            Z += b[x] * boltzmann(q, Quest, s, g)
+            Z += b[x] * boltzmann(beta, u, U, s, g)
         for x, g in enumerate(G):
-            Phuman = boltzmann(q, Quest, s, g)
+            Phuman = boltzmann(beta, u, U, s, g)
             Qinfo += b[x] * Phuman * np.log2(Phuman / Z)
     return Qinfo

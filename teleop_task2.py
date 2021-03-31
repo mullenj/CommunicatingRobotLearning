@@ -6,6 +6,7 @@ import subprocess
 import signal
 from return_home import return_home
 import teleop_utils as utils
+import hapticcode.haptic_control as haptic
 np.set_printoptions(suppress=True)
 
 """
@@ -66,8 +67,11 @@ def main():
 
     PORT_robot = 8080
     PORT_gripper = 8081
-    action_scale = 0.05
+    action_scale = 0.1
     interface = utils.Joystick()
+    print('[*] Connecting to haptic device...')
+    hapticconn = haptic.initialize()
+    y_triggered = False
 
     print('[*] Connecting to low-level controller...')
 
@@ -77,7 +81,7 @@ def main():
     # readState -> give you a dictionary with things like joint values, velocity, torque
     state = utils.readState(conn)
     # joint2pose -> forward kinematics: convert the joint position to the xyz position of the end-effector
-    coord_home = np.asarray(utils.joint2pose(state["q"]))
+    s_home = np.asarray(utils.joint2pose(state["q"]))
     # print(coord_home)
 
     # Prepare Trajectories by loading them into the trajectory class and getting an array of points along the trajectory to compare against
@@ -87,15 +91,15 @@ def main():
     trajectories = [utils.Trajectory(waypoint, playback_time) for waypoint in waypoints]
     trajectories = [np.asarray([utils.joint2pose(traj.get(time_i)) for time_i in list(np.linspace(0, playback_time, int(playback_time * 100 + 1)))]) for traj in trajectories]
     belief = np.asarray([0.25, 0.25, 0.25, 0.25])
-    BETA = 12
+    BETA = 1
     start_mode = True
     gripper_closed = False
-    latch_point = 0.55
+    gradient = 0.8
 
     print('[*] Ready for a teleoperation...')
 
     # Set up the initial robotInit.txt file
-    send2hololens(belief, coord_home, False, waypoints, latch_point)
+    send2hololens(belief, s_home, False, waypoints, gradient)
     # Start the Web Server
     print('[*] Starting Server')
     server = subprocess.Popen(["python3", "server.py"])
@@ -106,10 +110,13 @@ def main():
     while True:
         # read the current state of the robot + the xyz position
         state = utils.readState(conn)
-        coord_curr = np.asarray(utils.joint2pose(state["q"]))
+        s = np.asarray(utils.joint2pose(state["q"]))
 
         # get the humans joystick input
-        z, mode, grasp, stop = interface.input()
+        a_h, mode, grasp, stop = interface.input()
+        a_h[1] = -a_h[1]
+        a_h[2] = -a_h[2]
+        a_h = np.asarray(a_h)
         if grasp and (time.time() - start_time > 1):
             gripper_closed = not gripper_closed
             start_time = time.time()
@@ -119,83 +126,62 @@ def main():
             start_time = time.time()
 
         # Stop if button pressed or if going to hit the cup thing
-        if stop or (coord_curr[0] > 0.45 and coord_curr[0] < 0.65 and coord_curr[1] > -0.02 and coord_curr[1] < 0.27 and coord_curr[2] < 0.26):
+        if stop or (s[0] > 0.45 and s[0] < 0.65 and s[1] > -0.02 and s[1] < 0.27 and s[2] < 0.26):
             os.killpg(os.getpgid(server.pid), signal.SIGTERM)
+            haptic.close(hapticconn)
             # Run this command if the server doesnt stop correctly to find process you need to kill: lsof -i :8010
             return_home(conn, home)
             print("[*] Done!")
             return True
 
-        # this is where we compute the belief
-        # belief = probability that the human wants each goal
-        # belief = [confidence in goal 1, confidence in goal 2]
-        # Get the minimum distance to a trajectory in cartesian space, and set the belief
-        dist_trajectories = [min(np.linalg.norm(trajectory - coord_curr, axis = 1)) for trajectory in trajectories]
-        belief_denominator = sum(np.exp(-BETA * np.asarray(dist_trajectories)))
-        belief = [np.exp(-BETA * dist_trajectory) / belief_denominator for dist_trajectory in dist_trajectories]
-        belief /= np.sum(belief)
-        # print(belief) # This is the robot's current confidence
-
         # get the next location to navigate towards
-        def next_loc(trajectory, xyz):
+        def next_loc(trajectory, s, dist):
             try:
-                next_loc = trajectory[np.argmin(np.linalg.norm(trajectory - xyz, axis = 1)) + 10]
-                return proportional_gain * (next_loc - xyz)
+                return trajectory[np.argmin(np.linalg.norm(trajectory - s, axis = 1)) + dist]
             except:
-                print("Exception")
-                return (0, 0, 0)
-            finally:
-                if (coord_curr[2] < 0.075):
-                    return (0, 0, 0)
+                return trajectory[-1]
 
-        a_star = [next_loc(trajectory, coord_curr) for trajectory in trajectories]
+        # Make Goals at location in the future
+        G = [next_loc(trajectory, s, 200) for trajectory in trajectories]
+
+        # this is where we compute the belief
+        belief = [b * np.exp(-BETA * utils.cost_to_go(s, a_h, g)) / np.exp(-BETA * utils.cost_to_go(s, 0*a_h, g)) for g, b in zip(G, belief)]
+        belief /= np.sum(belief)
+        # print(belief)  # This is the robot's current confidence
+
+        # Individual and blended actions
+        a_star = proportional_gain * np.asarray([g - s for g in G])
         a_star = [action_scale * a / np.linalg.norm(a) if np.linalg.norm(a) > action_scale else a for a in a_star]
-        action = np.sum(a_star * belief[:, None], axis = 0)
-        # action = a_star[np.argmax(belief)]
-        if np.linalg.norm(action) > action_scale:
-            action = action_scale * action / np.linalg.norm(action)
-        if start_mode:
-            action = (0, 0, 0)
-
-        # Critical States (How to do this with trajectories as the goals)
-        # One way: instead of feading goal feed closest point to s + a
-        G = [min(np.linalg.norm(trajectory - (coord_curr + action), axis = 1)) for trajectory in trajectories]
-        C = sum([b*(utils.cost_to_go(coord_curr, action, goal_x) - utils.cost_to_go(coord_curr, a_star_x, goal_x)) for b, a_star_x, goal_x in zip(belief, a_star, G)])
-        print(C)
-        # id = np.identity(3)
-        # Quest = [[-0.1*id[:, i], 0.1*id[:, i]] for i in range(3)]
-        # Ix = [utils.info_gain(Quest_x, coord_curr, goals, belief) for Quest_x in Quest]
-
+        a_r = np.sum(a_star * belief[:, None], axis = 0)
         # human inputs converted to dx, dy, dz velocities in the end-effector space
-        # xdot = [0]*6
-        alpha = 1
-        z[1] = -z[1]
-        z[2] = -z[2]
-        a = (1-alpha) * action_scale * np.asarray(z) + alpha * np.asarray(action)
+        alpha = .6
+        a = (1-alpha) * action_scale * a_h + alpha * np.asarray(a_r)
+        a = np.pad(np.asarray(a), (0, 3), 'constant')
 
-        # Navigate
-        # xdot = [0]*6
-        # if max(belief) < 0.3:
-        #     xdot[0] = action_scale * z[0] + 0.5 * action[0]
-        #     xdot[1] = action_scale * -z[1] + 0.5 * action[1]
-        #     xdot[2] = action_scale * -z[2] + 0.5 * action[2]
-        # elif max(belief) < latch_point:
-        #     scalar = 1 + (max(belief) - 0.3)/(0.25)
-        #     xdot[0] = action_scale * z[0] + action[0] * scalar
-        #     xdot[1] = action_scale * -z[1] + action[1] * scalar
-        #     xdot[2] = action_scale * -z[2] + action[2] * scalar
-        # else:
-        #     xdot[0] = 2 * action[0]
-        #     xdot[1] = 2 * action[1]
-        #     xdot[2] = 2 * action[2]
+        # Critical States
+        C = sum([b*(utils.cost_to_go(s, a_r, goal_x) - utils.cost_to_go(s, a_star_x, goal_x)) for b, a_star_x, goal_x in zip(belief, a_star, G)])
+        id = np.identity(3)
+        U_set = [[-1*action_scale*id[:, i], action_scale*id[:, i]] for i in range(3)]
+        I_set = [utils.info_gain(BETA, U, s, G, belief) for U in U_set]
+        print(C, np.argmax(I_set))
+
+        if C > 0.04:
+            if np.argmax(I_set) == 1:
+                print("Critical State X")
+                if not y_triggered:
+                    haptic.haptic_command(hapticconn, 'horizontal', 3, 1)
+                    y_triggered = True
+
+        if start_mode:
+            a = [0]*6
 
         if (time.time() - lastsend) > sendfreq:
             # print("[*] Sending Updated Coordinates and Beliefs")
-            send2hololens(belief, coord_curr, True, None, None)
+            send2hololens(belief, s, True, None, None)
             lastsend = time.time()
 
         # convert this command to joint space
-        qdot = utils.xdot2qdot(np.pad(np.asarray(a), (0, 3), 'constant'), state)
+        qdot = utils.xdot2qdot(a, state)
         # send our final command to robot
         utils.send2robot(conn, qdot)
 

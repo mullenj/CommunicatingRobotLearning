@@ -1,28 +1,31 @@
 # Tunable Parameters
+
 ## Task1:
 * Send Frequency
 * BETA
 * action_scale
-* Assistance start
-* Robot Takeover confidence
-* Strength of assistance
+* action_scale_rot
+* alpha
+* gradient
+* Critical State thresholds
+
 ## Task2:
 * Send Frequency
 * BETA
 * action_scale
-* Assistance start
-* Robot Takeover confidence
-* Strength of assistance
+* alpha
+* gradient
+* Critical State thresholds
 * trajectory
 * trajectory length (time)
 * proportional_gain (trajectory action)
-* Indexes forward for next loc
+* Indexes forward for goal
+
 ## Task3:
 * Send Frequency
 * BETA
 * action_scale
-* Robot Takeover confidence
-* Strength of autonomy
-* belief
-* belief update Frequency
+* alpha
+* gradient
 * Critical State threshold
+* prior
