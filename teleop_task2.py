@@ -1,6 +1,7 @@
 import numpy as np
 import pickle
 import os
+import sys
 import time
 import subprocess
 import signal
@@ -84,13 +85,15 @@ def main():
     s_home = np.asarray(utils.joint2pose(state["q"]))
     # print(coord_home)
 
+    haptics_on = sys.argv[1] == 2
+
     # Prepare Trajectories by loading them into the trajectory class and getting an array of points along the trajectory to compare against
     playback_time = 20.0
     proportional_gain = 5.0
     waypoints = [pickle.load(open(traj + ".pkl", "rb")) for traj in trajectory_files]
     trajectories = [utils.Trajectory(waypoint, playback_time) for waypoint in waypoints]
     trajectories = [np.asarray([utils.joint2pose(traj.get(time_i)) for time_i in list(np.linspace(0, playback_time, int(playback_time * 100 + 1)))]) for traj in trajectories]
-    belief = np.asarray([0.25, 0.25, 0.25, 0.25])
+    belief = np.asarray([0.4, 0.2, 0.2, 0.2])
     BETA = 1
     start_mode = True
     gripper_closed = False
@@ -111,11 +114,13 @@ def main():
         # read the current state of the robot + the xyz position
         state = utils.readState(conn)
         s = np.asarray(utils.joint2pose(state["q"]))
-
+        print(s)
         # get the humans joystick input
-        a_h, mode, grasp, stop = interface.input()
-        a_h[1] = -a_h[1]
-        a_h[2] = -a_h[2]
+        z, mode, grasp, stop = interface.input()
+        a_h = [0]*3
+        a_h[0] = z[1]
+        a_h[1] = z[0]
+        a_h[2] = -z[2]
         a_h = np.asarray(a_h)
         if grasp and (time.time() - start_time > 1):
             gripper_closed = not gripper_closed
@@ -126,7 +131,7 @@ def main():
             start_time = time.time()
 
         # Stop if button pressed or if going to hit the cup thing
-        if stop or (s[0] > 0.45 and s[0] < 0.65 and s[1] > -0.02 and s[1] < 0.27 and s[2] < 0.26):
+        if stop or (s[0] > 0.45 and s[0] < 0.65 and s[1] > 0 and s[1] < 0.27 and s[2] < 0.26):
             os.killpg(os.getpgid(server.pid), signal.SIGTERM)
             haptic.close(hapticconn)
             # Run this command if the server doesnt stop correctly to find process you need to kill: lsof -i :8010
@@ -142,7 +147,7 @@ def main():
                 return trajectory[-1]
 
         # Make Goals at location in the future
-        G = [next_loc(trajectory, s, 200) for trajectory in trajectories]
+        G = [next_loc(trajectory, s, 150) for trajectory in trajectories]
 
         # this is where we compute the belief
         belief = [b * np.exp(-BETA * utils.cost_to_go(s, a_h, g)) / np.exp(-BETA * utils.cost_to_go(s, 0*a_h, g)) for g, b in zip(G, belief)]
@@ -156,6 +161,8 @@ def main():
         # human inputs converted to dx, dy, dz velocities in the end-effector space
         alpha = .6
         a = (1-alpha) * action_scale * a_h + alpha * np.asarray(a_r)
+        if s[2] < 0.075:
+            a = (0, 0, 0)
         a = np.pad(np.asarray(a), (0, 3), 'constant')
 
         # Critical States
@@ -165,10 +172,10 @@ def main():
         I_set = [utils.info_gain(BETA, U, s, G, belief) for U in U_set]
         print(C, np.argmax(I_set))
 
-        if C > 0.04:
+        if C > 0.02:
             if np.argmax(I_set) == 1:
                 print("Critical State X")
-                if not y_triggered:
+                if not y_triggered and haptics_on:
                     haptic.haptic_command(hapticconn, 'horizontal', 3, 1)
                     y_triggered = True
 

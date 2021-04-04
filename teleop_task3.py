@@ -80,10 +80,12 @@ def main():
     # readState -> give you a dictionary with things like joint values, velocity, torque
     state = utils.readState(conn)
     # joint2pose -> forward kinematics: convert the joint position to the xyz position of the end-effector
-    coord_home = np.asarray(utils.joint2pose(state["q"]))
-    # print(coord_home)
-    belief_dir = sys.argv[1]
-    belief_depth = sys.argv[2]
+    s_home = np.asarray(utils.joint2pose(state["q"]))
+
+    haptics_on = sys.argv[1] == 2
+
+    belief_dir = sys.argv[2]
+    belief_depth = sys.argv[3]
     if belief_dir == 'top' and belief_depth == "edge":
         belief = np.asarray([0.65, 0.15, 0.15, 0.15])
     elif belief_dir == 'bot' and belief_depth == "edge":
@@ -104,7 +106,7 @@ def main():
     print('[*] Ready for a teleoperation...')
 
     # Set up the initial robotInit.txt file
-    send2hololens(G, belief, coord_home, False, gradient)
+    send2hololens(G, belief, s_home, False, gradient)
     # Start the Web Server
     print('[*] Starting Server')
     server = subprocess.Popen(["python3", "server.py"])
@@ -119,9 +121,11 @@ def main():
         # print(s)
 
         # get the humans joystick input
-        a_h, mode, grasp, stop = interface.input()
-        a_h[1] = -a_h[1]
-        a_h[2] = -a_h[2]
+        z, mode, grasp, stop = interface.input()
+        a_h = [0]*3
+        a_h[0] = z[1]
+        a_h[1] = z[0]
+        a_h[2] = -z[2]
         a_h = np.asarray(a_h)
         if mode and (time.time() - start_time > 1):
             start_mode = not start_mode
@@ -140,7 +144,7 @@ def main():
             return True
 
         # this is where we compute the belief
-        belief = [b * np.exp(-BETA * utils.cost_to_go(s, a_h, g)) / np.exp(-BETA * utils.cost_to_go(s, 0*a_h, g)) for g, b in zip(G, belief)]
+        belief = [b * np.exp(-BETA * utils.cost_to_go(s, 0.5*a_h, g)) / np.exp(-BETA * utils.cost_to_go(s, 0*a_h, g)) for g, b in zip(G, belief)]
         belief /= np.sum(belief)
         # print(belief)  # This is the robot's current confidence
 
@@ -163,12 +167,12 @@ def main():
         if C > 0.011:
             if np.argmax(I_set) == 2:
                 print("Critical State Z")
-                if not z_triggered:
+                if not z_triggered and haptics_on:
                     haptic.haptic_command(hapticconn, 'vertical', 3, 1)
                     z_triggered = True
             if np.argmax(I_set) == 1:
                 print("Critical State Y")
-                if not y_triggered:
+                if not y_triggered and haptics_on:
                     haptic.haptic_command(hapticconn, 'horizontal', 3, 1)
                     y_triggered = True
 

@@ -1,8 +1,10 @@
 import numpy as np
 import os
+import sys
 import time
 import subprocess
 import signal
+import tkinter as tk
 from return_home import return_home
 import teleop_utils as utils
 import hapticcode.haptic_control as haptic
@@ -80,8 +82,10 @@ def main():
     state = utils.readState(conn)
     # joint2pose -> forward kinematics: convert the joint position to the xyz position of the end-effector
     s_home = np.asarray(utils.joint2posewrot(state["q"]))
-    # print(coord_home)
-    belief = np.asarray([0.25, 0.25, 0.25, 0.25])
+
+    haptics_on = sys.argv[1] == 2
+
+    belief = np.asarray([0.2, 0.2, 0.3, 0.3])
     BETA = 0.5
     translation_mode = True
     start_mode = True
@@ -99,15 +103,31 @@ def main():
     lastsend = time.time() - sendfreq
     start_time = time.time()
 
+    window = tk.Tk()
+    window.title("User Study GUI")
+    text = tk.Label(text="The below table represents the belief as a percentage for each goal.")
+    text.pack()
+    b_text = ["Top Shelf, Upright:            ", "Bottom Shelf, Upright:      ", "Top Shelf, Sideways:        ", "Bottom Shelf, Sideways:  "]
+    b_vars = [tk.StringVar(), tk.StringVar(), tk.StringVar(), tk.StringVar()]
+    b_labels = [tk.Label(window, textvariable = b_var) for b_var in b_vars]
+    [b_var.set(f"{b_t}{b:.3f}") for b_t, b_var, b in zip(b_text, b_vars, belief)]
+    [b_label.pack() for b_label in b_labels]
+
     while True:
+        window.update()
+        [b_var.set(f"{b_t}{b:.3f}") for b_t, b_var, b in zip(b_text, b_vars, belief)]
         # read the current state of the robot + the xyz position
         state = utils.readState(conn)
         s = np.asarray(utils.joint2posewrot(state["q"]))
-        # print(xyz_curr, rot_curr)
-        # print(xyz_curr) THis is where the robot currently is
+        # print(s)
 
         # get the humans joystick input
         z, mode, grasp, stop = interface.input()
+        a_h = [0]*3
+        a_h[0] = z[1]
+        a_h[1] = z[0]
+        a_h[2] = -z[2]
+        a_h = np.asarray(a_h)
         if mode and (time.time() - start_time > 1):
             if start_mode:
                 start_mode = not start_mode
@@ -126,9 +146,7 @@ def main():
             print("[*] Done!")
             return True
 
-        z[1] = -z[1]
-        z[2] = -z[2]
-        a_h = np.pad(np.asarray(z), (0, 3), 'constant')
+        a_h = np.pad(a_h, (0, 3), 'constant')
         if not translation_mode:
             a_h = np.pad(np.asarray(z), (3, 0), 'constant')
 
@@ -157,18 +175,18 @@ def main():
         id = np.identity(6)
         U_set = [[-action_scale*id[:, i], action_scale*id[:, i]] for i in range(6)]
         I_set = [utils.info_gain(BETA, U, s, G, belief) for U in U_set]
-        print(C, np.argmax(I_set))
+        # print(C, np.argmax(I_set))
 
         # Naive implementation of Haptics
         if C > 0.065:
             if np.argmax(I_set) == 2:
                 print("Critical State Z")
-                if not z_triggered:
+                if not z_triggered and haptics_on:
                     haptic.haptic_command(hapticconn, 'vertical', 3, 1)
                     z_triggered = True
             elif np.argmax(I_set) > 2 and C > 0.12:
                 print("Critical State Rotation")
-                if not rot_triggered:
+                if not rot_triggered and haptics_on:
                     haptic.haptic_command(hapticconn, 'circular', 3, 1)
                     rot_triggered = True
 
