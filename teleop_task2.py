@@ -149,8 +149,8 @@ def main():
             gripper_closed = not gripper_closed
             start_time = time.time()
             utils.send2gripper(conn_gripper)
-        if mode and (time.time() - start_time > 1):
-            start_mode = not start_mode
+        if mode and start_mode and (time.time() - start_time > 1):
+            start_mode = False
             start_time = time.time()
             start_timer = time.time()
             print("[*] Started")
@@ -203,6 +203,8 @@ def main():
                     print("Critical State X")
                     haptic.haptic_command(hapticconn, 'horizontal', 3, 1)
                     y_triggered = True
+        else:
+            crit_var.set("")
 
         if start_mode or time.time() - start_timer < motion_start or (s[2] < 0.075):
             a = [0]*6

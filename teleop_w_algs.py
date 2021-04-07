@@ -94,8 +94,8 @@ def main():
     window.title("User Study GUI")
     text = tk.Label(text="The below table represents the belief as a percentage for each goal.")
     text.pack()
-    b_text = ["Top Shelf, Edge:          ", "Bottom Shelf, Edge:    ", "Top Shelf, Inside:        ", "Bottom Shelf, Inside:  "]
-    b_vars = [tk.StringVar(), tk.StringVar(), tk.StringVar(), tk.StringVar()]
+    b_text = ["Cup:     ", "Plate:   ", "Pad:     "]
+    b_vars = [tk.StringVar(), tk.StringVar(), tk.StringVar()]
     b_labels = [tk.Label(window, textvariable = b_var) for b_var in b_vars]
     [b_var.set(f"{b_t}{b:.3f}") for b_t, b_var, b in zip(b_text, b_vars, belief)]
     [b_label.pack() for b_label in b_labels]
@@ -148,7 +148,7 @@ def main():
         id = np.identity(3)
         U_set = [[-1*action_scale*id[:, i], action_scale*id[:, i]] for i in range(3)]
         I_set = [utils.info_gain(BETA, U, s, G, belief) for U in U_set]
-        print(C, np.argmax(I_set))
+        # print(C, np.argmax(I_set))
 
         if C > 0.035:
             if np.argmax(I_set) == 0:
@@ -164,6 +164,8 @@ def main():
                     print("Critical State Y")
                     haptic.haptic_command(hapticconn, 'horizontal', 3, 1)
                     y_triggered = True
+        else:
+            crit_var.set("")
 
         if start_mode:
             a = [0]*6

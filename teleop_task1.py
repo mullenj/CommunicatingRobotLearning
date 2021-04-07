@@ -138,10 +138,10 @@ def main():
         a_h[1] = z[0]
         a_h[2] = -z[2]
         a_h = np.asarray(a_h)
-        if mode and (time.time() - start_time > 1):
+        if mode and start_mode and (time.time() - start_time > 1):
             if start_mode:
                 print("[*] Started")
-                start_mode = not start_mode
+                start_mode = False
                 start_timer = time.time()
             else:
                 translation_mode = not translation_mode
@@ -206,6 +206,8 @@ def main():
                     print("Critical State Rotation")
                     haptic.haptic_command(hapticconn, 'circular', 3, 1)
                     rot_triggered = True
+        else:
+            crit_var.set("")
 
         if not translation_mode:
             a = action_scale_rot * np.pad(np.asarray(z), (3, 0), 'constant')

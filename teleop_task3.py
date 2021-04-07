@@ -66,8 +66,7 @@ def main():
     participant = sys.argv[1]
     method = sys.argv[2]
     haptics_on = method == "B" or method == "D"
-    attempt = sys.argv[3]
-    prior_command = sys.argv[4]
+    prior_command = sys.argv[3]
 
     PORT_robot = 8080
     PORT_gripper = 8081
@@ -150,10 +149,11 @@ def main():
         a_h[1] = z[0]
         a_h[2] = -z[2]
         a_h = np.asarray(a_h)
-        if mode and (time.time() - start_time > 1):
-            start_mode = not start_mode
+        if mode and start_mode and (time.time() - start_time > 1):
+            start_mode = False
             start_time = time.time()
             start_timer = time.time()
+            print("[*] Started")
         if grasp and (time.time() - start_time > 1):
             gripper_closed = not gripper_closed
             start_time = time.time()
@@ -161,7 +161,7 @@ def main():
 
         if stop or (not start_mode and time.time() - start_timer > 50):
             utils.end()
-            pickle.dump(data, open(f"users/user{participant}/task3/data_method_{method}_attempt_{attempt}.pkl", "wb"))
+            pickle.dump(data, open(f"users/user{participant}/task3/data_method_{method}_prior_{prior_command}.pkl", "wb"))
             haptic.close(hapticconn)
             return_home(conn, home)
             print("[*] Done!")
@@ -205,6 +205,8 @@ def main():
                     print("Critical State Y")
                     haptic.haptic_command(hapticconn, 'horizontal', 3, 1)
                     y_triggered = True
+        else:
+            crit_var.set("")
 
         if start_mode or time.time() - start_timer < motion_start:
             a = [0]*6
