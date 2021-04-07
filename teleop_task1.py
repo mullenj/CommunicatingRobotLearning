@@ -138,7 +138,7 @@ def main():
         a_h[1] = z[0]
         a_h[2] = -z[2]
         a_h = np.asarray(a_h)
-        if mode and start_mode and (time.time() - start_time > 1):
+        if mode and (time.time() - start_time > 1):
             if start_mode:
                 print("[*] Started")
                 start_mode = False
