@@ -1,9 +1,8 @@
 import numpy as np
-import os
 import sys
 import time
-import subprocess
-import signal
+import pickle
+import random
 import tkinter as tk
 from return_home import return_home
 import teleop_utils as utils
@@ -33,7 +32,7 @@ goal2 = np.asarray([0.45, -0.485, 0.222, 1.59, 0.766, 0.058])  # Bottom Shelf fl
 goal3 = np.asarray([0.45, -0.485, 0.65, 1.59, -0.795, 0.027])  # Top Shelf sideways
 goal4 = np.asarray([0.45, -0.485, 0.222, 1.59, -0.795, 0.027])  # Bottom Shelf sideways
 G = [goal1, goal2, goal3, goal4]
-sendfreq = 0.1
+sendfreq = 0.1 # (also sets data saving)
 
 '''
 This function allows us to send all of the necessary information to the hololens.
@@ -41,7 +40,7 @@ This information changes based off of what state the program is in, initialized
 or in progress.
 '''
 def send2hololens(goals, belief, coord_curr, initialized, latch_point):
-    # print(belief)
+    print(belief)
     # print(xyz_curr)
     if initialized:
         with open('robotUpdate.txt', 'w') as f:
@@ -63,6 +62,10 @@ def send2hololens(goals, belief, coord_curr, initialized, latch_point):
 
 def main():
 
+    participant = sys.argv[1]
+    method = sys.argv[2]
+    haptics_on = method == "B" or method == "D"
+
     PORT_robot = 8080
     PORT_gripper = 8081
     action_scale = 0.05
@@ -83,25 +86,29 @@ def main():
     # joint2pose -> forward kinematics: convert the joint position to the xyz position of the end-effector
     s_home = np.asarray(utils.joint2posewrot(state["q"]))
 
-    haptics_on = sys.argv[1] == 2
-
     belief = np.asarray([0.2, 0.2, 0.3, 0.3])
-    BETA = 0.5
+    BETA = 0.05
     translation_mode = True
     start_mode = True
     gripper_closed = False
-    gradient = 0.75
+    gradient = 0.65
+    dist = 1
 
     print('[*] Ready for a teleoperation...')
 
     # Set up the initial robotInit.txt file
     send2hololens(G, belief, s_home, False, gradient)
-    # Start the Web Server
-    print('[*] Starting Server')
-    server = subprocess.Popen(["python3", "server.py"])
-    print('[*] Server Ready')
+
+    # Set up time counters
     lastsend = time.time() - sendfreq
+    lastsave = time.time() - sendfreq
     start_time = time.time()
+    task_start_time = time.time()
+    start_timer = time.time()
+    motion_start = random.uniform(1, 5)
+
+    # Data variable for saving to pickle file
+    data = []
 
     window = tk.Tk()
     window.title("User Study GUI")
@@ -112,6 +119,9 @@ def main():
     b_labels = [tk.Label(window, textvariable = b_var) for b_var in b_vars]
     [b_var.set(f"{b_t}{b:.3f}") for b_t, b_var, b in zip(b_text, b_vars, belief)]
     [b_label.pack() for b_label in b_labels]
+    crit_var = tk.StringVar()
+    crit_label = tk.Label(window, textvariable = crit_var)
+    crit_label.pack()
 
     while True:
         window.update()
@@ -130,7 +140,9 @@ def main():
         a_h = np.asarray(a_h)
         if mode and (time.time() - start_time > 1):
             if start_mode:
+                print("[*] Started")
                 start_mode = not start_mode
+                start_timer = time.time()
             else:
                 translation_mode = not translation_mode
             start_time = time.time()
@@ -139,9 +151,10 @@ def main():
             start_time = time.time()
             utils.send2gripper(conn_gripper)
 
-        if stop:
-            os.killpg(os.getpgid(server.pid), signal.SIGTERM)
-            # Run this command if the server doesnt stop correctly to find process you need to kill: lsof -i :8010
+        if stop or dist < 0.03 or (not start_mode and time.time() - start_timer > 45):
+            utils.end()
+            pickle.dump(data, open(f"users/user{participant}/task1/data_method_{method}.pkl", "wb"))
+            haptic.close(hapticconn)
             return_home(conn, home)
             print("[*] Done!")
             return True
@@ -149,10 +162,12 @@ def main():
         a_h = np.pad(a_h, (0, 3), 'constant')
         if not translation_mode:
             a_h = np.pad(np.asarray(z), (3, 0), 'constant')
+            a_h[3] = 0
+            a_h[5] = 0
 
         # this is where we compute the belief
         belief_trans = [b * np.exp(-BETA * utils.cost_to_go(s[:3], a_h[:3], g[:3])) / np.exp(-BETA * utils.cost_to_go(s[:3], 0*a_h[:3], g[:3])) for g, b in zip(G, belief)]
-        belief_rot = [b * np.exp(-BETA * utils.cost_to_go(s[3:], action_scale * a_h[3:], g[3:])) / np.exp(-BETA * utils.cost_to_go(s[3:], 0*a_h[3:], g[3:])) for g, b in zip(G, belief)]
+        belief_rot = [b * np.exp(-2*BETA * utils.cost_to_go(s[3:], a_h[3:], g[3:])) / np.exp(-2*BETA * utils.cost_to_go(s[3:], 0*a_h[3:], g[3:])) for g, b in zip(G, belief)]
         belief = np.sum((belief_trans, belief_rot), axis = 0)
         belief /= np.sum(belief)
         # print(belief)
@@ -178,22 +193,26 @@ def main():
         # print(C, np.argmax(I_set))
 
         # Naive implementation of Haptics
-        if C > 0.065:
+        if C > 0.066:
             if np.argmax(I_set) == 2:
-                print("Critical State Z")
+                crit_var.set("Critical State Z!")
                 if not z_triggered and haptics_on:
+                    print("Critical State Z")
                     haptic.haptic_command(hapticconn, 'vertical', 3, 1)
                     z_triggered = True
-            elif np.argmax(I_set) > 2 and C > 0.12:
-                print("Critical State Rotation")
+            elif np.argmax(I_set) > 2 and C > 0.15:
+                crit_var.set("Critical State Rotation!")
                 if not rot_triggered and haptics_on:
+                    print("Critical State Rotation")
                     haptic.haptic_command(hapticconn, 'circular', 3, 1)
                     rot_triggered = True
 
         if not translation_mode:
             a = action_scale_rot * np.pad(np.asarray(z), (3, 0), 'constant')
+            a[3] = 0
+            a[5] = 0
 
-        if start_mode:
+        if start_mode or time.time() - start_timer < motion_start:
             a = [0]*6
 
         if (time.time() - lastsend) > sendfreq:
@@ -206,9 +225,13 @@ def main():
         # send our final command to robot
         utils.send2robot(conn, qdot)
 
-        # every so many iteration (every so many second 0.1)
-        # data = [].append([joint positon, belief, input, ....])
-        # when they press start , pickle.save(data)
+        dist = np.min([np.linalg.norm(s[:3] - g[:3]) for g in G])
+        # print(dist)
+
+        # every so many second save data
+        if (time.time() - lastsave) > sendfreq and not start_mode:
+            data.append([time.time() - task_start_time, state, s, G, a_h, a_star, a_r, belief, z_triggered, rot_triggered])
+            lastsave = time.time()
 
 
 if __name__ == "__main__":

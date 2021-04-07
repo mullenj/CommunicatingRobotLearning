@@ -215,3 +215,9 @@ def info_gain(beta, U, s, G, b):
             Phuman = boltzmann(beta, u, U, s, g)
             Qinfo += b[x] * Phuman * np.log2(Phuman / Z)
     return Qinfo
+
+def end():
+    with open('robotUpdate.txt', 'w') as f:
+        f.write("Done")
+    with open('robotInit.txt', 'w') as f:
+        f.write("Done")

@@ -1,10 +1,9 @@
 import numpy as np
 import pickle
-import os
 import sys
 import time
-import subprocess
-import signal
+import random
+import tkinter as tk
 from return_home import return_home
 import teleop_utils as utils
 import hapticcode.haptic_control as haptic
@@ -28,7 +27,7 @@ np.set_printoptions(suppress=True)
     run ./collab/velocity_control
     run ./collab/grasp_control
 """
-sendfreq = 0.1
+sendfreq = 0.1 # (also sets data saving)
 trajectory_files = ["task2_path0", "task2_path1", "task2_path2", "task2_path3"]
 home = np.asarray([0.000297636, -0.785294, -0.000218009, -2.3567, 0.000397658, 1.57042, 0.785205])
 
@@ -39,6 +38,7 @@ This information changes based off of what state the program is in, initialized
 or in progress.
 '''
 def send2hololens(belief, coord_curr, initialized, waypoints, latch_point):
+    print(belief)
     if initialized:
         with open('robotUpdate.txt', 'w') as f:
             f.write(f"{coord_curr[0]}\t{coord_curr[1]}\t{coord_curr[2]}\n")
@@ -66,9 +66,13 @@ def send2hololens(belief, coord_curr, initialized, waypoints, latch_point):
 
 def main():
 
+    participant = sys.argv[1]
+    method = sys.argv[2]
+    haptics_on = method == "B" or method == "D"
+
     PORT_robot = 8080
     PORT_gripper = 8081
-    action_scale = 0.1
+    action_scale = 0.04
     interface = utils.Joystick()
     print('[*] Connecting to haptic device...')
     hapticconn = haptic.initialize()
@@ -85,8 +89,6 @@ def main():
     s_home = np.asarray(utils.joint2pose(state["q"]))
     # print(coord_home)
 
-    haptics_on = sys.argv[1] == 2
-
     # Prepare Trajectories by loading them into the trajectory class and getting an array of points along the trajectory to compare against
     playback_time = 20.0
     proportional_gain = 5.0
@@ -94,7 +96,7 @@ def main():
     trajectories = [utils.Trajectory(waypoint, playback_time) for waypoint in waypoints]
     trajectories = [np.asarray([utils.joint2pose(traj.get(time_i)) for time_i in list(np.linspace(0, playback_time, int(playback_time * 100 + 1)))]) for traj in trajectories]
     belief = np.asarray([0.4, 0.2, 0.2, 0.2])
-    BETA = 1
+    BETA = 0.1
     start_mode = True
     gripper_closed = False
     gradient = 0.8
@@ -103,18 +105,39 @@ def main():
 
     # Set up the initial robotInit.txt file
     send2hololens(belief, s_home, False, waypoints, gradient)
-    # Start the Web Server
-    print('[*] Starting Server')
-    server = subprocess.Popen(["python3", "server.py"])
-    print('[*] Server Ready')
+
+    # Set up time counters
     lastsend = time.time() - sendfreq
+    lastsave = time.time() - sendfreq
     start_time = time.time()
+    task_start_time = time.time()
+    start_timer = time.time()
+    motion_start = random.uniform(1, 5)
+
+    # Data variable for saving to pickle file
+    data = []
+
+    window = tk.Tk()
+    window.title("User Study GUI")
+    text = tk.Label(text="The below table represents the belief as a percentage for each goal.")
+    text.pack()
+    b_text = ["Through the cup:  ", "Over the cup:        ", "Left of cup:           ", "Right of cup:        "]
+    b_vars = [tk.StringVar(), tk.StringVar(), tk.StringVar(), tk.StringVar()]
+    b_labels = [tk.Label(window, textvariable = b_var) for b_var in b_vars]
+    [b_var.set(f"{b_t}{b:.3f}") for b_t, b_var, b in zip(b_text, b_vars, belief)]
+    [b_label.pack() for b_label in b_labels]
+    crit_var = tk.StringVar()
+    crit_label = tk.Label(window, textvariable = crit_var)
+    crit_label.pack()
 
     while True:
+        window.update()
+        [b_var.set(f"{b_t}{b:.3f}") for b_t, b_var, b in zip(b_text, b_vars, belief)]
         # read the current state of the robot + the xyz position
         state = utils.readState(conn)
         s = np.asarray(utils.joint2pose(state["q"]))
-        print(s)
+        # print(s)
+
         # get the humans joystick input
         z, mode, grasp, stop = interface.input()
         a_h = [0]*3
@@ -129,12 +152,15 @@ def main():
         if mode and (time.time() - start_time > 1):
             start_mode = not start_mode
             start_time = time.time()
+            start_timer = time.time()
+            print("[*] Started")
 
         # Stop if button pressed or if going to hit the cup thing
-        if stop or (s[0] > 0.45 and s[0] < 0.65 and s[1] > 0 and s[1] < 0.27 and s[2] < 0.26):
-            os.killpg(os.getpgid(server.pid), signal.SIGTERM)
+        hitting_cup = (s[0] > 0.45 and s[0] < 0.65 and s[1] > 0.02 and s[1] < 0.27 and s[2] < 0.26)
+        if stop or hitting_cup or (not start_mode and time.time() - start_timer > 55):
+            utils.end()
+            pickle.dump(data, open(f"users/user{participant}/task2/data_method_{method}.pkl", "wb"))
             haptic.close(hapticconn)
-            # Run this command if the server doesnt stop correctly to find process you need to kill: lsof -i :8010
             return_home(conn, home)
             print("[*] Done!")
             return True
@@ -161,8 +187,6 @@ def main():
         # human inputs converted to dx, dy, dz velocities in the end-effector space
         alpha = .6
         a = (1-alpha) * action_scale * a_h + alpha * np.asarray(a_r)
-        if s[2] < 0.075:
-            a = (0, 0, 0)
         a = np.pad(np.asarray(a), (0, 3), 'constant')
 
         # Critical States
@@ -170,16 +194,17 @@ def main():
         id = np.identity(3)
         U_set = [[-1*action_scale*id[:, i], action_scale*id[:, i]] for i in range(3)]
         I_set = [utils.info_gain(BETA, U, s, G, belief) for U in U_set]
-        print(C, np.argmax(I_set))
+        # print(C, np.argmax(I_set))
 
-        if C > 0.02:
+        if C > 0.0161:
             if np.argmax(I_set) == 1:
-                print("Critical State X")
+                crit_var.set("Critical State X!")
                 if not y_triggered and haptics_on:
+                    print("Critical State X")
                     haptic.haptic_command(hapticconn, 'horizontal', 3, 1)
                     y_triggered = True
 
-        if start_mode:
+        if start_mode or time.time() - start_timer < motion_start or (s[2] < 0.075):
             a = [0]*6
 
         if (time.time() - lastsend) > sendfreq:
@@ -192,9 +217,10 @@ def main():
         # send our final command to robot
         utils.send2robot(conn, qdot)
 
-        # every so many iteration (every so many second 0.1)
-        # data = [].append([joint positon, belief, input, ....])
-        # when they press start , pickle.save(data)
+        # every so many second save data
+        if (time.time() - lastsave) > sendfreq and not start_mode:
+            data.append([time.time() - task_start_time, state, s, G, a_h, a_star, a_r, belief, y_triggered])
+            lastsave = time.time()
 
 
 if __name__ == "__main__":

@@ -1,4 +1,3 @@
-import numpy as np
 import http.server
 import socketserver
 
@@ -14,6 +13,6 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         pass
 
-        print ("stop")
+        print("stop")
     webServer.server_close()
     print("Server stopped.")

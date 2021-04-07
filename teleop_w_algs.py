@@ -1,8 +1,6 @@
 import numpy as np
 import sys
 import time
-import pickle
-import random
 import tkinter as tk
 from return_home import return_home
 import teleop_utils as utils
@@ -10,12 +8,11 @@ import hapticcode.haptic_control as haptic
 np.set_printoptions(suppress=True)
 
 """
- * a script for teleoperating the robot using a joystick in task 3 of the senior
- * design user study. It is set up to have two final location goals and the
- * study operator sets which goal it prefers. When hitting a critical state, the
- * user is notified to provide corrections if necessary.
+ * a minimal script for teleoperating the robot using a joystick
+ * Three goals are present and the system operates similarly to the tasks
+ * The user should be able to acclimate to the methods using this
  * Dylan Losey, September 2020
- * James Mullen, March 2021
+ * James Mullen, April 2021
 
  * To run:
  [1] in one terminal:
@@ -24,25 +21,20 @@ np.set_printoptions(suppress=True)
  [2] in a second terminal:
     navigate to ~/libfranka/build
     run ./collab/velocity_control
-    run ./collab/grasp_control
 """
-home = np.asarray([0.709588, -0.446052, 0.020361, -2.536814, -1.168517, 0.98433, -0.128633])  # real home
-goal1 = np.asarray([0.45, -0.485, 0.65])  # Top Shelf edge
-goal2 = np.asarray([0.45, -0.485, 0.222])  # Bottom Shelf edge
-goal3 = np.asarray([0.45, -0.65, 0.65])  # Top Shelf In
-goal4 = np.asarray([0.45, -0.65, 0.222])  # Bottom Shelf In
-G = [goal1, goal2, goal3, goal4] # , goal3, goal4]
-sendfreq = 0.1 # (also sets data saving)
 
 
-'''
-This function allows us to send all of the necessary information to the hololens.
-This information changes based off of what state the program is in, initialized
-or in progress.
-'''
+# hard coded three goal positions
+goal1 = np.asarray([0.63, -0.0525, 0.12])
+goal2 = np.asarray([0.55, 0.37, 0.077])
+goal3 = np.asarray([0.08, 0.4, 0.1])
+G = [goal1, goal2, goal3]
+sendfreq = 0.1
+home = np.asarray([0.000297636, -0.785294, -0.000218009, -2.3567, 0.000397658, 1.57042, 0.785205])
+
+
 def send2hololens(goals, belief, coord_curr, initialized, latch_point):
-    print(belief)
-    # print(xyz_curr)
+    # print(belief)
     if initialized:
         with open('robotUpdate.txt', 'w') as f:
             f.write(f"{coord_curr[0]}\t{coord_curr[1]}\t{coord_curr[2]}\n")
@@ -60,50 +52,33 @@ def send2hololens(goals, belief, coord_curr, initialized, latch_point):
                 else:
                     f.write(f"{goal[0]}\t{goal[1]}\t{goal[2]}\t{belief_x}")
 
-
 def main():
 
-    participant = sys.argv[1]
-    method = sys.argv[2]
+    method = sys.argv[1]
     haptics_on = method == "B" or method == "D"
-    attempt = sys.argv[3]
-    prior_command = sys.argv[4]
 
     PORT_robot = 8080
-    PORT_gripper = 8081
     action_scale = 0.05
     interface = utils.Joystick()
     print('[*] Connecting to haptic device...')
     hapticconn = haptic.initialize()
-    z_triggered = False
+    x_triggered = False
     y_triggered = False
 
     print('[*] Connecting to low-level controller...')
 
     conn = utils.connect2robot(PORT_robot)  # connect to other computer
-    conn_gripper = utils.connect2robot(PORT_gripper)
 
     # readState -> give you a dictionary with things like joint values, velocity, torque
     state = utils.readState(conn)
     # joint2pose -> forward kinematics: convert the joint position to the xyz position of the end-effector
     s_home = np.asarray(utils.joint2pose(state["q"]))
 
-    belief = [0.25, 0.25, 0.25, 0.25]
-    prior_set = False
-    if prior_command == "A":
-        prior = np.asarray([0, 0, 0, 1.0])
-    elif prior_command == "B":
-        prior = np.asarray([0, 0, 0.5, 0.5])
-    elif prior_command == "C":
-        prior = np.asarray([0, 0.5, 0, 0.5])
-    else:
-        print("[*] Please input a valid prior ('A'. 'B', or 'C')")
-        sys.exit()
+    belief = [0.33, 0.33, 0.33]
 
     BETA = 0.05
     start_mode = True
-    gripper_closed = False
-    gradient = 0.9
+    gradient = 0.8
 
     print('[*] Ready for a teleoperation...')
 
@@ -112,15 +87,8 @@ def main():
 
     # Set up timers
     lastsend = time.time() - sendfreq
-    lastsave = time.time() - sendfreq
     start_time = time.time()
-    task_start_time = time.time()
-    start_timer = time.time()
-    motion_start = random.uniform(1, 5)
-    set_prior_time = motion_start + random.uniform(4, 8)
-
-    # Data variable for saving to pickle file
-    data = []
+    haptic_timer = time.time()
 
     window = tk.Tk()
     window.title("User Study GUI")
@@ -153,15 +121,9 @@ def main():
         if mode and (time.time() - start_time > 1):
             start_mode = not start_mode
             start_time = time.time()
-            start_timer = time.time()
-        if grasp and (time.time() - start_time > 1):
-            gripper_closed = not gripper_closed
-            start_time = time.time()
-            utils.send2gripper(conn_gripper)
 
-        if stop or (not start_mode and time.time() - start_timer > 50):
+        if stop:
             utils.end()
-            pickle.dump(data, open(f"users/user{participant}/task3/data_method_{method}_attempt_{attempt}.pkl", "wb"))
             haptic.close(hapticconn)
             return_home(conn, home)
             print("[*] Done!")
@@ -170,10 +132,6 @@ def main():
         # this is where we compute the belief
         belief = [b * np.exp(-BETA * utils.cost_to_go(s, 0.5*a_h, g)) / np.exp(-BETA * utils.cost_to_go(s, 0*a_h, g)) for g, b in zip(G, belief)]
         belief /= np.sum(belief)
-        if not start_mode and not prior_set and (time.time() - start_timer > set_prior_time):
-            print(start_timer, prior_set)
-            prior_set = True
-            belief = prior
         # print(belief)  # This is the robot's current confidence
 
         # Individual and blended actions
@@ -190,23 +148,24 @@ def main():
         id = np.identity(3)
         U_set = [[-1*action_scale*id[:, i], action_scale*id[:, i]] for i in range(3)]
         I_set = [utils.info_gain(BETA, U, s, G, belief) for U in U_set]
-        # print(C, np.argmax(I_set))
+        print(C, np.argmax(I_set))
 
-        if C > 0.011:
-            if np.argmax(I_set) == 2:
-                crit_var.set("Critical State Z!")
-                if not z_triggered and haptics_on:
-                    print("Critical State Z")
+        if C > 0.035:
+            if np.argmax(I_set) == 0:
+                crit_var.set("Critical State X!")
+                if not x_triggered and haptics_on:
+                    print("Critical State X")
                     haptic.haptic_command(hapticconn, 'vertical', 3, 1)
-                    z_triggered = True
-            if np.argmax(I_set) == 1:
+                    x_triggered = True
+                    haptic_timer = time.time()
+            if C > 0.4 and np.argmax(I_set) == 1 and time.time() - haptic_timer > 5:
                 crit_var.set("Critical State Y!")
                 if not y_triggered and haptics_on:
                     print("Critical State Y")
                     haptic.haptic_command(hapticconn, 'horizontal', 3, 1)
                     y_triggered = True
 
-        if start_mode or time.time() - start_timer < motion_start:
+        if start_mode:
             a = [0]*6
 
         if (time.time() - lastsend) > sendfreq:
@@ -218,11 +177,6 @@ def main():
         qdot = utils.xdot2qdot(a, state)
         # send our final command to robot
         utils.send2robot(conn, qdot)
-
-        # every so many second save data
-        if (time.time() - lastsave) > sendfreq and not start_mode:
-            data.append([time.time() - task_start_time, state, s, G, a_h, a_star, a_r, belief, z_triggered, y_triggered])
-            lastsave = time.time()
 
 
 if __name__ == "__main__":
