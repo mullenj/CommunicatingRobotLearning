@@ -31,7 +31,11 @@ goal1 = np.asarray([0.45, -0.485, 0.65, 1.59, 0.766, 0.058])  # Top Shelf flat
 goal2 = np.asarray([0.45, -0.485, 0.222, 1.59, 0.766, 0.058])  # Bottom Shelf flat
 goal3 = np.asarray([0.45, -0.485, 0.65, 1.59, -0.795, 0.027])  # Top Shelf sideways
 goal4 = np.asarray([0.45, -0.485, 0.222, 1.59, -0.795, 0.027])  # Bottom Shelf sideways
-G = [goal1, goal2, goal3, goal4]
+goal5 = np.asarray([0.45, -0.65, 0.62, 1.59, 0.766, 0.058])  # Top Shelf flat back
+goal6 = np.asarray([0.45, -0.65, 0.19, 1.59, 0.766, 0.058])  # Bottom Shelf flat back
+goal7 = np.asarray([0.45, -0.65, 0.62, 1.59, -0.795, 0.027])  # Top Shelf sideways back
+goal8 = np.asarray([0.45, -0.65, 0.19, 1.59, -0.795, 0.027])  # Bottom Shelf sideways back
+G = [goal1, goal2, goal3, goal4, goal5, goal6, goal7, goal8]
 sendfreq = 0.1 # (also sets data saving)
 
 '''
@@ -40,7 +44,7 @@ This information changes based off of what state the program is in, initialized
 or in progress.
 '''
 def send2hololens(goals, belief, coord_curr, initialized, latch_point):
-    print(belief)
+    # print(belief)
     # print(xyz_curr)
     if initialized:
         with open('robotUpdate.txt', 'w') as f:
@@ -75,6 +79,7 @@ def main():
     hapticconn = haptic.initialize()
     rot_triggered = False
     z_triggered = False
+    x_triggered = False
 
     print('[*] Connecting to low-level controller...')
 
@@ -86,12 +91,12 @@ def main():
     # joint2pose -> forward kinematics: convert the joint position to the xyz position of the end-effector
     s_home = np.asarray(utils.joint2posewrot(state["q"]))
 
-    belief = np.asarray([0.2, 0.2, 0.3, 0.3])
-    BETA = 0.05
+    belief = np.asarray([0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125])
+    BETA = 0.1
     translation_mode = True
     start_mode = True
     gripper_closed = False
-    gradient = 0.65
+    gradient = 0.7
     dist = 1
 
     print('[*] Ready for a teleoperation...')
@@ -114,8 +119,8 @@ def main():
     window.title("User Study GUI")
     text = tk.Label(text="The below table represents the belief as a percentage for each goal.")
     text.pack()
-    b_text = ["Top Shelf, Upright:            ", "Bottom Shelf, Upright:      ", "Top Shelf, Sideways:        ", "Bottom Shelf, Sideways:  "]
-    b_vars = [tk.StringVar(), tk.StringVar(), tk.StringVar(), tk.StringVar()]
+    b_text = ["Top Shelf, Upright:            ", "Bottom Shelf, Upright:      ", "Top Shelf, Sideways:        ", "Bottom Shelf, Sideways:  ", "Top Shelf, Upright, Back:            ", "Bottom Shelf, Upright, Back:      ", "Top Shelf, Sideways, Back:        ", "Bottom Shelf, Sideways, Back:  "]
+    b_vars = [tk.StringVar(), tk.StringVar(), tk.StringVar(), tk.StringVar(), tk.StringVar(), tk.StringVar(), tk.StringVar(), tk.StringVar()]
     b_labels = [tk.Label(window, textvariable = b_var) for b_var in b_vars]
     [b_var.set(f"{b_t}{b:.3f}") for b_t, b_var, b in zip(b_text, b_vars, belief)]
     [b_label.pack() for b_label in b_labels]
@@ -151,7 +156,7 @@ def main():
             start_time = time.time()
             utils.send2gripper(conn_gripper)
 
-        if stop or dist < 0.03 or (not start_mode and time.time() - start_timer > 45):
+        if stop or dist < 0.016:
             utils.end()
             pickle.dump(data, open(f"users/user{participant}/task1/data_method_{method}.pkl", "wb"))
             haptic.close(hapticconn)
@@ -166,7 +171,8 @@ def main():
             a_h[5] = 0
 
         # this is where we compute the belief
-        belief_trans = [b * np.exp(-BETA * utils.cost_to_go(s[:3], a_h[:3], g[:3])) / np.exp(-BETA * utils.cost_to_go(s[:3], 0*a_h[:3], g[:3])) for g, b in zip(G, belief)]
+        belief_trans = [b * np.exp(-BETA * utils.cost_to_go(s[:3], 0.1*a_h[:3], g[:3])) / np.exp(-BETA * utils.cost_to_go(s[:3], 0*a_h[:3], g[:3])) for g, b in zip(G, belief)]
+        print([np.exp(-BETA * utils.cost_to_go(s[:3], 0.25*a_h[:3], G[5][:3])) / np.exp(-BETA * utils.cost_to_go(s[:3], 0*a_h[:3], G[5][:3])), np.exp(-BETA * utils.cost_to_go(s[:3], 0.25*a_h[:3], G[1][:3])) / np.exp(-BETA * utils.cost_to_go(s[:3], 0*a_h[:3], G[1][:3]))])
         belief_rot = [b * np.exp(-2*BETA * utils.cost_to_go(s[3:], a_h[3:], g[3:])) / np.exp(-2*BETA * utils.cost_to_go(s[3:], 0*a_h[3:], g[3:])) for g, b in zip(G, belief)]
         belief = np.sum((belief_trans, belief_rot), axis = 0)
         belief /= np.sum(belief)
@@ -193,7 +199,13 @@ def main():
         # print(C, np.argmax(I_set))
 
         # Naive implementation of Haptics
-        if C > 0.066:
+        if C > 0.04:
+            if np.argmax(I_set) == 1 and C > 0.06:
+                crit_var.set("Critical State X!")
+                if not x_triggered and haptics_on:
+                    print("Critical State X")
+                    haptic.haptic_command(hapticconn, 'horizontal', 3, 1)
+                    x_triggered = True
             if np.argmax(I_set) == 2:
                 crit_var.set("Critical State Z!")
                 if not z_triggered and haptics_on:
@@ -227,12 +239,12 @@ def main():
         # send our final command to robot
         utils.send2robot(conn, qdot)
 
-        dist = np.min([np.linalg.norm(s[:3] - g[:3]) for g in G])
+        dist = np.linalg.norm(s[:3] - G[5][:3])
         # print(dist)
 
         # every so many second save data
         if (time.time() - lastsave) > sendfreq and not start_mode:
-            data.append([time.time() - task_start_time, state, s, G, a_h, a_star, a_r, belief, z_triggered, rot_triggered])
+            data.append([time.time() - task_start_time, state, s, G, a_h, a_star, a_r, belief, z_triggered, rot_triggered, x_triggered])
             lastsave = time.time()
 
 

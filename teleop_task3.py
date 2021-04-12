@@ -87,22 +87,20 @@ def main():
     # joint2pose -> forward kinematics: convert the joint position to the xyz position of the end-effector
     s_home = np.asarray(utils.joint2pose(state["q"]))
 
-    belief = [0.25, 0.25, 0.25, 0.25]
-    prior_set = False
-    if prior_command == "A":
-        prior = np.asarray([0, 0, 0, 1.0])
-    elif prior_command == "B":
-        prior = np.asarray([0, 0, 0.5, 0.5])
-    elif prior_command == "C":
-        prior = np.asarray([0, 0.5, 0, 0.5])
-    else:
-        print("[*] Please input a valid prior ('A'. 'B', or 'C')")
-        sys.exit()
-
     BETA = 0.05
     start_mode = True
     gripper_closed = False
-    gradient = 0.9
+    gradient = 0.8
+
+    belief = [0.25, 0.25, 0.25, 0.25]
+    prior_set = False
+    prior = np.asarray([0, 0, 0.5, 0.5])
+    if prior_command == "B":
+        next_prior = [0, 0, 0, 1]
+        BETA = 0.005
+    elif prior_command != "A" and prior_command != "C":
+        print("[*] Please input a valid prior ('A'. 'B', or 'C')")
+        sys.exit()
 
     print('[*] Ready for a teleoperation...')
 
@@ -118,6 +116,11 @@ def main():
     gui_update_timer = time.time()
     motion_start = random.uniform(1, 5)
     set_prior_time = motion_start + random.uniform(4, 8)
+    prior_timer = time.time()
+    prior_timer_start = False
+    time_controlled = 0
+
+    dist = 1
 
     # Data variable for saving to pickle file
     data = []
@@ -152,6 +155,12 @@ def main():
         a_h[1] = z[0]
         a_h[2] = -z[2]
         a_h = np.asarray(a_h)
+        if prior_command == "B" and not prior_timer_start and not np.array_equal(a_h, np.asarray([0]*3)):
+            prior_timer_start = True
+            prior_timer = time.time()
+        if prior_command == "B" and prior_timer_start and not np.array_equal(a_h, np.asarray([0]*3)):
+            time_controlled += time.time() - prior_timer
+            prior_timer = time.time()
         if mode and start_mode and (time.time() - start_time > 1):
             start_mode = False
             start_time = time.time()
@@ -162,7 +171,7 @@ def main():
             start_time = time.time()
             utils.send2gripper(conn_gripper)
 
-        if stop or (not start_mode and time.time() - start_timer > 50):
+        if stop or dist < 0.03:
             utils.end()
             pickle.dump(data, open(f"users/user{participant}/task3/data_method_{method}_prior_{prior_command}.pkl", "wb"))
             haptic.close(hapticconn)
@@ -171,12 +180,17 @@ def main():
             return True
 
         # this is where we compute the belief
-        belief = [b * np.exp(-BETA * utils.cost_to_go(s, 0.5*a_h, g)) / np.exp(-BETA * utils.cost_to_go(s, 0*a_h, g)) for g, b in zip(G, belief)]
+        belief = [b * np.exp(-BETA * utils.cost_to_go(s, 0.4*a_h, g)) / np.exp(-BETA * utils.cost_to_go(s, 0*a_h, g)) for g, b in zip(G, belief)]
         belief /= np.sum(belief)
         if not start_mode and not prior_set and (time.time() - start_timer > set_prior_time):
             print(start_timer, prior_set)
             prior_set = True
             belief = prior
+        if prior_command == "B" and prior_timer_start and time_controlled > 1.5:
+            belief = np.asarray(next_prior)
+        elif belief[1] == 0 and prior_command == "C" and prior_timer_start and (time.time() - prior_timer > 24):
+            belief[1] += 0.75
+
         # print(belief)  # This is the robot's current confidence
 
         # Individual and blended actions
@@ -213,6 +227,9 @@ def main():
 
         if start_mode or time.time() - start_timer < motion_start:
             a = [0]*6
+        elif not prior_timer_start and prior_command != "B":
+            prior_timer_start = True
+            prior_timer = time.time()
 
         if (time.time() - lastsend) > sendfreq:
             # print("[*] Sending Updated Coordinates and Beliefs")
@@ -223,6 +240,8 @@ def main():
         qdot = utils.xdot2qdot(a, state)
         # send our final command to robot
         utils.send2robot(conn, qdot)
+
+        dist = np.linalg.norm(s[:3] - G[3][:3])
 
         # every so many second save data
         if (time.time() - lastsave) > sendfreq and not start_mode:
