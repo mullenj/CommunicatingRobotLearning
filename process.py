@@ -6,7 +6,7 @@ import numpy as np
 # each dictionary entry is a numpy array
 def sort_data(data):
     D = {"time": [], "q": [], "s": [], "G": [], "ah": [], "astar": [],
-                    "ar": [], "belief": []}
+         "ar": [], "belief": []}
     for datapoint in data:
         D["time"].append(datapoint[0])
         D["q"].append(list(datapoint[1]['q']))
@@ -27,14 +27,13 @@ def sort_data(data):
 def get_criticality(data):
     C = []
     for idx in range(len(data["time"])):
-        belief = data["belief"][idx,:]
+        belief = data["belief"][idx, :]
         a_star = data["astar"][idx]
         G = data["G"][idx]
-        ar = data["ar"][idx,:]
-        s = data["s"][idx,:]
+        ar = data["ar"][idx, :]
+        s = data["s"][idx, :]
         C.append(sum([b*(np.linalg.norm(s+ar - goal_x) - np.linalg.norm(s+a_star_x - goal_x)) for b, a_star_x, goal_x in zip(belief, a_star, G)]))
     return np.asarray(C)
-
 
 
 USERS = [1, 2, 3, 4, 5]

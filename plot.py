@@ -1,6 +1,7 @@
 import pickle
 import numpy as np
 import matplotlib.pyplot as plt
+np.set_printoptions(suppress=True)
 
 
 # how much time the user was interacting with the joystick
@@ -37,8 +38,7 @@ def critical_alignment(data):
     return time_critical
 
 
-
-TASK = 2
+TASK = 1
 METHOD = ["A", "B", "C", "D"]
 
 results = []

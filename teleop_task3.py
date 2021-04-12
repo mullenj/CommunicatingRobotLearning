@@ -115,6 +115,7 @@ def main():
     start_time = time.time()
     task_start_time = time.time()
     start_timer = time.time()
+    gui_update_timer = time.time()
     motion_start = random.uniform(1, 5)
     set_prior_time = motion_start + random.uniform(4, 8)
 
@@ -136,7 +137,9 @@ def main():
 
     while True:
         window.update()
-        [b_var.set(f"{b_t}{b:.3f}") for b_t, b_var, b in zip(b_text, b_vars, belief)]
+        if time.time() - gui_update_timer < 3:
+            [b_var.set(f"{b_t}{b:.3f}") for b_t, b_var, b in zip(b_text, b_vars, belief)]
+            gui_update_timer = time.time()
         # read the current state of the robot + the xyz position
         state = utils.readState(conn)
         s = np.asarray(utils.joint2pose(state["q"]))
