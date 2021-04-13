@@ -1,5 +1,6 @@
 import pickle
 import numpy as np
+import sys
 import matplotlib.pyplot as plt
 np.set_printoptions(suppress=True)
 
@@ -48,7 +49,7 @@ def total_time(data):
     return data["time"][-1]
 
 
-TASK = 5
+TASK = int(sys.argv[1])
 METHOD = ["A", "B", "C", "D"]
 
 results = []
@@ -68,8 +69,11 @@ for method in METHOD:
             m6 = criticality(data)
             # m7 = total_time(data)
             results_method.append([m1, m2, m5, m6])
-
-    results.append(results_method)
+        results_method = np.asarray(results_method)
+    results.append(np.mean(results_method, axis=0))       # averages results
+    # results.append(results_method)                        # individual results
 
 results = np.asarray(results)
+print("Rows are A, B, C, D")
+print("Columns are interaction time, score, efficiency, total criticality")
 print(results)
