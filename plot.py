@@ -38,7 +38,7 @@ def critical_alignment(data):
     return time_critical
 
 
-TASK = 1
+TASK = 4
 METHOD = ["A", "B", "C", "D"]
 
 results = []

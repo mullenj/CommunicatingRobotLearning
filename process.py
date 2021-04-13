@@ -36,7 +36,7 @@ def get_criticality(data):
     return np.asarray(C)
 
 
-USERS = [1, 2, 3, 4, 5]
+USERS = [1, 2] # , 3, 4, 5]
 TASK = [1, 2, 3, 4, 5]
 METHOD = ["A", "B", "C", "D"]
 
