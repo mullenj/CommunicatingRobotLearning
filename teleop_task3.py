@@ -166,6 +166,7 @@ def main():
             start_time = time.time()
             start_timer = time.time()
             print("[*] Started")
+            pickle.dump(True, open("game_start.pkl", "wb"))
         if grasp and (time.time() - start_time > 1):
             gripper_closed = not gripper_closed
             start_time = time.time()
@@ -173,6 +174,7 @@ def main():
 
         if stop or dist < 0.03:
             utils.end()
+            pickle.dump(False, open("game_start.pkl", "wb"))
             pickle.dump(data, open(f"users/user{participant}/task3/data_method_{method}_prior_{prior_command}.pkl", "wb"))
             haptic.close(hapticconn)
             return_home(conn, home)

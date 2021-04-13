@@ -148,6 +148,7 @@ def main():
                 print("[*] Started")
                 start_mode = False
                 start_timer = time.time()
+                pickle.dump(True, open("game_start.pkl", "wb"))
             else:
                 translation_mode = not translation_mode
             start_time = time.time()
@@ -157,6 +158,7 @@ def main():
             utils.send2gripper(conn_gripper)
 
         if stop or dist < 0.016:
+            pickle.dump(False, open("game_start.pkl", "wb"))
             utils.end()
             pickle.dump(data, open(f"users/user{participant}/task1/data_method_{method}.pkl", "wb"))
             haptic.close(hapticconn)

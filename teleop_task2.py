@@ -154,11 +154,13 @@ def main():
             start_time = time.time()
             start_timer = time.time()
             print("[*] Started")
+            pickle.dump(True, open("game_start.pkl", "wb"))
 
         # Stop if button pressed or if going to hit the cup thing
         hitting_cup = (s[0] > 0.45 and s[0] < 0.65 and s[1] > 0.02 and s[1] < 0.27 and s[2] < 0.26)
         if stop or hitting_cup or (not start_mode and time.time() - start_timer > 55):
             utils.end()
+            pickle.dump(False, open("game_start.pkl", "wb"))
             pickle.dump(data, open(f"users/user{participant}/task2/data_method_{method}.pkl", "wb"))
             haptic.close(hapticconn)
             return_home(conn, home)

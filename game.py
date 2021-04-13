@@ -2,6 +2,8 @@
 # Import and initialize the pygame library
 import pygame
 import random
+import math
+import pickle
 pygame.init()
 
 def text_objects(text, font):
@@ -14,46 +16,51 @@ COLOR_INACTIVE = pygame.Color('lightskyblue3')
 COLOR_ACTIVE = pygame.Color('dodgerblue2')
 FONT = pygame.font.Font(None, 32)
 
-class cell:
-    def __init__(self):
-        self.x = random.randrange(10, WIDTH-10) # x position
-        self.y = random.randrange(10, HEIGHT-10) # y position
-        self.speed = random.randrange(2,5) # cell speed
+class moving_target:
+    def __init__(self, HEIGHT, WIDTH):
+        self.x = random.randrange(50, WIDTH-50) # x position
+        self.y = random.randrange(50, HEIGHT-50) # y position
+        self.speed = 2 # cell speed
         self.move = [None, None] # realtive x and y coordinates to move to
         self.direction = None # movement direction
+        self.WIDTH = WIDTH
+        self.HEIGHT = HEIGHT
 
     def draw(self):
-        pygame.draw.rect(screen, (255, 255, 255), (self.x, self.y, Pixsize, Pixsize), 0) # draw the cell
+        pygame.draw.circle(screen, (0, 0, 255), (self.x, self.y), 75, 5) # draw the cell
+        pygame.draw.circle(screen, (0, 0, 255), (self.x, self.y), 7)
 
 
     def wander(self):
         directions = {"S":((-1,2),(1,self.speed)),"SW":((-self.speed,-1),(1,self.speed)),"W":((-self.speed,-1),(-1,2)),"NW":((-self.speed,-1),(-self.speed,-1)),"N":((-1,2),(-self.speed,-1)),"NE":((1,self.speed),(-self.speed,-1)),"E":((1,self.speed),(-1,2)),"SE":((1,self.speed),(1,self.speed))} #((min x, max x)(min y, max y))
-        directionsName = ("S","SW","W","NW","N","NE","E","SE") #possible directions
-        if random.randrange(0,5) == 2: #move about once every 5 frames
-            if self.direction == None: #if no direction is set, set a random one
+        directionsName = ("S","SW","W","NW","N","NE","E","SE") # possible directions
+        smallOffset = random.random()
+        num = random.randrange(0,40)
+        if num == 2: # change direction about once every 40 frames
+            if self.direction == None: # if no direction is set, set a random one
                 self.direction = random.choice(directionsName)
             else:
-                a = directionsName.index(self.direction) #get the index of direction in directions list
-                b = random.randrange(a-1,a+2) #set the direction to be the same, or one next to the current direction
-                if b > len(directionsName)-1: #if direction index is outside the list, move back to the start
+                a = directionsName.index(self.direction) # get the index of direction in directions list
+                b = random.randrange(a-1,a+2) # set the direction to be the same, or one next to the current direction
+                if b > len(directionsName)-1: # if direction index is outside the list, move back to the start
                     b = 0
                 self.direction = directionsName[b]
-            self.move[0] = random.randrange(directions[self.direction][0][0],directions[self.direction][0][1]) #change relative x to a random number between min x and max x
-            self.move[1] = random.randrange(directions[self.direction][1][0],directions[self.direction][1][1]) #change relative y to a random number between min y and max y
-        if self.x < 5 or self.x > WIDTH - 5 or self.y < 5 or self.y > HEIGHT - 5: #if cell is near the border of the screen, change direction
-            if self.x < 5:
+            self.move[0] = random.randrange(directions[self.direction][0][0],directions[self.direction][0][1]) + smallOffset # change relative x to a random number between min x and max x
+            self.move[1] = random.randrange(directions[self.direction][1][0],directions[self.direction][1][1]) + smallOffset # change relative y to a random number between min y and max y
+        if self.x < 50 or self.x > self.WIDTH - 50 or self.y < 50 or self.y > self.HEIGHT - 50: # if cell is near the border of the screen, change direction
+            if self.x < 50:
                 self.direction = "E"
-            elif self.x > WIDTH - 5:
+            elif self.x > self.WIDTH - 50:
                 self.direction = "W"
-            elif self.y < 5:
+            elif self.y < 50:
                 self.direction = "S"
-            elif self.y > HEIGHT - 5:
+            elif self.y > self.HEIGHT - 50:
                 self.direction = "N"
-            self.move[0] = random.randrange(directions[self.direction][0][0],directions[self.direction][0][1]) #change relative x to a random number between min x and max x
-            self.move[1] = random.randrange(directions[self.direction][1][0],directions[self.direction][1][1]) #change relative x to a random number between min x and max x
-        if self.move[0] != None: #add the relative coordinates to the cells coordinates
-            self.x += self.move[0]
-            self.y += self.move[1]
+            self.move[0] = random.randrange(directions[self.direction][0][0],directions[self.direction][0][1]) + smallOffset # change relative x to a random number between min x and max x
+            self.move[1] = random.randrange(directions[self.direction][1][0],directions[self.direction][1][1]) + smallOffset # change relative x to a random number between min x and max x
+        if self.move[0] != None: # add the relative coordinates to the cells coordinates
+            self.x += self.move[0]/3
+            self.y += self.move[1]/3
 
 class InputBox:
 
@@ -98,6 +105,7 @@ class InputBox:
         pygame.draw.rect(screen, self.color, self.rect, 2)
 
 def main():
+    user = "FAIL"
     method = "FAIL"
     task = "FAIL"
     prior = "FAIL"
@@ -118,7 +126,8 @@ def main():
     input_box1 = InputBox(100, 200, 140, 32)
     input_box2 = InputBox(100, 400, 140, 32)
     input_box3 = InputBox(100, 600, 140, 32)
-    input_boxes = [input_box1, input_box2, input_box3]
+    input_box4 = InputBox(100, 800, 140, 32)
+    input_boxes = [input_box1, input_box2, input_box3, input_box4]
 
     while intro:
         # stores the (x,y) coordinates into
@@ -131,9 +140,10 @@ def main():
                 # if the mouse is clicked on the
                 # button the game is terminated
                 if display_width/2-100 <= mouse[0] <= display_width/2+100 and display_height/2+210 <= mouse[1] <= display_height/2+290:
-                    method = input_box1.text
-                    task = input_box2.text
-                    prior = input_box3.text
+                    user = input_box1.text
+                    method = input_box2.text
+                    task = input_box3.text
+                    prior = input_box4.text
                     intro = False
 
             for box in input_boxes:
@@ -158,16 +168,20 @@ def main():
         TextRect.center = ((display_width/2), (display_height/2+250))
         screen.blit(TextSurf, TextRect)
 
-        TextSurf, TextRect = text_objects("Method", largeText)
+        TextSurf, TextRect = text_objects("User", largeText)
         TextRect.center = ((100, 100))
         screen.blit(TextSurf, TextRect)
 
-        TextSurf, TextRect = text_objects("Task", largeText)
+        TextSurf, TextRect = text_objects("Method", largeText)
         TextRect.center = ((100, 300))
         screen.blit(TextSurf, TextRect)
 
-        TextSurf, TextRect = text_objects("Prior", largeText)
+        TextSurf, TextRect = text_objects("Task", largeText)
         TextRect.center = ((100, 500))
+        screen.blit(TextSurf, TextRect)
+
+        TextSurf, TextRect = text_objects("Prior", largeText)
+        TextRect.center = ((100, 700))
         screen.blit(TextSurf, TextRect)
 
         pygame.display.update()
@@ -177,11 +191,28 @@ def main():
 
     score = 0
     running = True
+    game_started = False
+    target = moving_target(display_height, display_width)
     while running:
+        # stores the (x,y) coordinates into
+        # the variable as a tuple
+        mouse = pygame.mouse.get_pos()
+
+        game_start = pickle.load(open("game_start.pkl", "rb"))
+        if game_start and not game_started:
+            game_started = True
+
         # Did the user click the window close button?
         for event in pygame.event.get():
-            if event.type == pygame.QUIT:
+            if event.type == pygame.QUIT or (game_started and not game_start):
                 running = False
+
+            dist_x = mouse[0] - target.x
+            dist_y = mouse[1] - target.y
+            # Calculate the length of the hypotenuse. If it's less than the
+            # radius, the mouse collides with the circle.
+            if math.hypot(dist_x, dist_y) < 50 and game_start:
+                score+=1
 
         # Fill the background with white
         screen.fill((255, 255, 255))
@@ -190,14 +221,21 @@ def main():
         TextSurf, TextRect = text_objects(f"SCORE: {score}", largeText)
         TextRect.center = ((750, 900))
         screen.blit(TextSurf, TextRect)
-        #
-        pygame.draw.circle(screen, (0, 0, 255), (250, 250), 75)
-        # # Flip the display
+
+        target.wander()
+        target.draw()
         pygame.display.update()
 
     # Done! Time to quit.
+    if task == "3":
+        pickle.dump(score, open(f"users/user{user}/task{task}/game_method_{method}_prior_{prior}.pkl", "wb"))
+    else:
+        pickle.dump(score, open(f"users/user{user}/task{task}/game_method_{method}.pkl", "wb"))
     pygame.quit()
 
 
 if __name__ == "__main__":
     main()
+
+pickle.dump(True, open("game_start.pkl", "wb"))
+pickle.dump(False, open("game_start.pkl", "wb"))

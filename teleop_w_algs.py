@@ -119,11 +119,13 @@ def main():
         a_h[2] = -z[2]
         a_h = np.asarray(a_h)
         if mode and (time.time() - start_time > 1):
-            start_mode = not start_mode
+            start_mode = True
+            pickle.dump(True, open("game_start.pkl", "wb"))
             start_time = time.time()
 
         if stop:
             utils.end()
+            pickle.dump(False, open("game_start.pkl", "wb"))
             haptic.close(hapticconn)
             return_home(conn, home)
             print("[*] Done!")
