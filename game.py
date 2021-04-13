@@ -4,6 +4,7 @@ import pygame
 import random
 import math
 import pickle
+import time
 pygame.init()
 
 def text_objects(text, font):
@@ -192,6 +193,7 @@ def main():
     score = 0
     running = True
     game_started = False
+    game_timer = time.time()
     target = moving_target(display_height, display_width)
     while running:
         # stores the (x,y) coordinates into
@@ -201,6 +203,7 @@ def main():
         game_start = pickle.load(open("game_start.pkl", "rb"))
         if game_start and not game_started:
             game_started = True
+            game_timer = time.time()
 
         # Did the user click the window close button?
         for event in pygame.event.get():
@@ -226,11 +229,12 @@ def main():
         target.draw()
         pygame.display.update()
 
-    # Done! Time to quit.
-    if task == "3":
-        pickle.dump(score, open(f"users/user{user}/task{task}/game_method_{method}_prior_{prior}.pkl", "wb"))
-    else:
-        pickle.dump(score, open(f"users/user{user}/task{task}/game_method_{method}.pkl", "wb"))
+    if score > 5:
+        # Done! Time to quit.
+        if task == "3":
+            pickle.dump(score/(time.time()-game_timer), open(f"users/user{user}/task{task}/game_method_{method}_prior_{prior}.pkl", "wb"))
+        else:
+            pickle.dump(score/(time.time()-game_timer), open(f"users/user{user}/task{task}/game_method_{method}.pkl", "wb"))
     pygame.quit()
 
 

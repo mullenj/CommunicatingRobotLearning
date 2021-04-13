@@ -3,6 +3,7 @@ import sys
 import time
 import tkinter as tk
 from return_home import return_home
+import pickle
 import teleop_utils as utils
 import hapticcode.haptic_control as haptic
 np.set_printoptions(suppress=True)
@@ -118,8 +119,10 @@ def main():
         a_h[1] = z[0]
         a_h[2] = -z[2]
         a_h = np.asarray(a_h)
+        print(start_mode)
+        print(time.time() - start_time)
         if mode and (time.time() - start_time > 1):
-            start_mode = True
+            start_mode = False
             pickle.dump(True, open("game_start.pkl", "wb"))
             start_time = time.time()
 
@@ -157,7 +160,7 @@ def main():
                 crit_var.set("Critical State X!")
                 if not x_triggered and haptics_on:
                     print("Critical State X")
-                    haptic.haptic_command(hapticconn, 'vertical', 3, 1)
+                    haptic.haptic_command(hapticconn, 'horizontal', 3, 1)
                     x_triggered = True
                     haptic_timer = time.time()
             if C > 0.4 and np.argmax(I_set) == 1 and time.time() - haptic_timer > 5:

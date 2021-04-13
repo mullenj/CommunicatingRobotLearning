@@ -46,6 +46,8 @@ or in progress.
 def send2hololens(goals, belief, coord_curr, initialized, latch_point):
     # print(belief)
     # print(xyz_curr)
+    goals = [goals[0], goals[1], goals[4], goals[5]]
+    belief = [belief[0], belief[1], belief[4], belief[5]]
     if initialized:
         with open('robotUpdate.txt', 'w') as f:
             f.write(f"{coord_curr[0]}\t{coord_curr[1]}\t{coord_curr[2]}\t{coord_curr[3]}\t{coord_curr[4]}\t{coord_curr[5]}\n")
@@ -92,7 +94,7 @@ def main():
     s_home = np.asarray(utils.joint2posewrot(state["q"]))
 
     belief = np.asarray([0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125])
-    BETA = 0.1
+    BETA = 0.7
     translation_mode = True
     start_mode = True
     gripper_closed = False
@@ -157,7 +159,7 @@ def main():
             start_time = time.time()
             utils.send2gripper(conn_gripper)
 
-        if stop or dist < 0.016:
+        if stop or dist < 0.03:
             pickle.dump(False, open("game_start.pkl", "wb"))
             utils.end()
             pickle.dump(data, open(f"users/user{participant}/task1/data_method_{method}.pkl", "wb"))
@@ -173,9 +175,9 @@ def main():
             a_h[5] = 0
 
         # this is where we compute the belief
-        belief_trans = [b * np.exp(-BETA * utils.cost_to_go(s[:3], 0.1*a_h[:3], g[:3])) / np.exp(-BETA * utils.cost_to_go(s[:3], 0*a_h[:3], g[:3])) for g, b in zip(G, belief)]
-        print([np.exp(-BETA * utils.cost_to_go(s[:3], 0.25*a_h[:3], G[5][:3])) / np.exp(-BETA * utils.cost_to_go(s[:3], 0*a_h[:3], G[5][:3])), np.exp(-BETA * utils.cost_to_go(s[:3], 0.25*a_h[:3], G[1][:3])) / np.exp(-BETA * utils.cost_to_go(s[:3], 0*a_h[:3], G[1][:3]))])
-        belief_rot = [b * np.exp(-2*BETA * utils.cost_to_go(s[3:], a_h[3:], g[3:])) / np.exp(-2*BETA * utils.cost_to_go(s[3:], 0*a_h[3:], g[3:])) for g, b in zip(G, belief)]
+        belief_trans = [b * np.exp(-BETA * utils.cost_to_go(s[:3], 0.01*a_h[:3], g[:3])) / np.exp(-BETA * utils.cost_to_go(s[:3], 0*a_h[:3], g[:3])) for g, b in zip(G, belief)]
+        # print([np.exp(-BETA * utils.cost_to_go(s[:3], 0.25*a_h[:3], G[5][:3])) / np.exp(-BETA * utils.cost_to_go(s[:3], 0*a_h[:3], G[5][:3])), np.exp(-BETA * utils.cost_to_go(s[:3], 0.25*a_h[:3], G[1][:3])) / np.exp(-BETA * utils.cost_to_go(s[:3], 0*a_h[:3], G[1][:3]))])
+        belief_rot = [b * np.exp(-2*BETA * utils.cost_to_go(s[3:], 0.1*a_h[3:], g[3:])) / np.exp(-2*BETA * utils.cost_to_go(s[3:], 0*a_h[3:], g[3:])) for g, b in zip(G, belief)]
         belief = np.sum((belief_trans, belief_rot), axis = 0)
         belief /= np.sum(belief)
         # print(belief)
@@ -198,11 +200,11 @@ def main():
         id = np.identity(6)
         U_set = [[-action_scale*id[:, i], action_scale*id[:, i]] for i in range(6)]
         I_set = [utils.info_gain(BETA, U, s, G, belief) for U in U_set]
-        # print(C, np.argmax(I_set))
+        print(C, np.argmax(I_set))
 
         # Naive implementation of Haptics
         if C > 0.04:
-            if np.argmax(I_set) == 1 and C > 0.06:
+            if np.argmax(I_set) == 1:
                 crit_var.set("Critical State X!")
                 if not x_triggered and haptics_on:
                     print("Critical State X")
@@ -246,7 +248,7 @@ def main():
 
         # every so many second save data
         if (time.time() - lastsave) > sendfreq and not start_mode:
-            data.append([time.time() - task_start_time, state, s, G, a_h, a_star, a_r, belief, z_triggered, rot_triggered, x_triggered])
+            data.append([time.time() - task_start_time, state, s, G, a_h, a_star, a_r, belief, C, z_triggered, rot_triggered, x_triggered])
             lastsave = time.time()
 
 

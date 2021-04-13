@@ -159,8 +159,8 @@ def main():
         # Stop if button pressed or if going to hit the cup thing
         hitting_cup = (s[0] > 0.45 and s[0] < 0.65 and s[1] > 0.02 and s[1] < 0.27 and s[2] < 0.26)
         if stop or hitting_cup or (not start_mode and time.time() - start_timer > 55):
-            utils.end()
             pickle.dump(False, open("game_start.pkl", "wb"))
+            utils.end()
             pickle.dump(data, open(f"users/user{participant}/task2/data_method_{method}.pkl", "wb"))
             haptic.close(hapticconn)
             return_home(conn, home)
@@ -223,7 +223,7 @@ def main():
 
         # every so many second save data
         if (time.time() - lastsave) > sendfreq and not start_mode:
-            data.append([time.time() - task_start_time, state, s, G, a_h, a_star, a_r, belief, y_triggered])
+            data.append([time.time() - task_start_time, state, s, G, a_h, a_star, a_r, belief, C, y_triggered])
             lastsave = time.time()
 
 

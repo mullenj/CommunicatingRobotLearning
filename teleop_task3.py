@@ -90,7 +90,7 @@ def main():
     BETA = 0.05
     start_mode = True
     gripper_closed = False
-    gradient = 0.8
+    gradient = 0.7
 
     belief = [0.25, 0.25, 0.25, 0.25]
     prior_set = False
@@ -173,8 +173,8 @@ def main():
             utils.send2gripper(conn_gripper)
 
         if stop or dist < 0.03:
-            utils.end()
             pickle.dump(False, open("game_start.pkl", "wb"))
+            utils.end()
             pickle.dump(data, open(f"users/user{participant}/task3/data_method_{method}_prior_{prior_command}.pkl", "wb"))
             haptic.close(hapticconn)
             return_home(conn, home)
@@ -247,7 +247,7 @@ def main():
 
         # every so many second save data
         if (time.time() - lastsave) > sendfreq and not start_mode:
-            data.append([time.time() - task_start_time, state, s, G, a_h, a_star, a_r, belief, z_triggered, y_triggered])
+            data.append([time.time() - task_start_time, state, s, G, a_h, a_star, a_r, belief, C, z_triggered, y_triggered])
             lastsave = time.time()
 
 
