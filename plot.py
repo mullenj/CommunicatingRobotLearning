@@ -45,6 +45,7 @@ def criticality(data):
     C = np.copy(data["critical"])
     return sum(C)
 
+# total time spent on the task
 def total_time(data):
     return data["time"][-1]
 
