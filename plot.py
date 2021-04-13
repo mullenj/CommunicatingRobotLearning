@@ -13,6 +13,10 @@ def interaction_time(data):
             ah_time += 0.1
     return ah_time
 
+# score normalized by time on the distractor game
+def score(data):
+    return data["score"]
+
 # Shannon entropy over belief as a function of time
 # i.e., how uncertain the robot about the human's goal as a function of time
 def entropy(data):
@@ -24,21 +28,27 @@ def entropy(data):
 # robot's learned belief in true goal
 def belief(data):
     bfinal = data["belief"][-1]
-    return bfinal[3]
+    if data["task"] == 1:
+        return bfinal[5]
+    if data["task"] == 2:
+        return bfinal[2]
+    if data["task"] > 2:
+        return bfinal[3]
 
-# amount of time the robot was in critical states
-# my understanding is that the robot stops in these states? So we should want to minimize this?
-def critical_alignment(data):
+# how efficiently the human taught the robot their desired goal
+def efficiency(data):
+    return belief(data) / interaction_time(data)
+
+# cumulative measure of criticality
+def criticality(data):
     C = np.copy(data["critical"])
-    C /= max(C)
-    time_critical = 0
-    for c in C:
-        if c > 0.8:
-            time_critical += 0.1
-    return time_critical
+    return sum(C)
+
+def total_time(data):
+    return data["time"][-1]
 
 
-TASK = 4
+TASK = 5
 METHOD = ["A", "B", "C", "D"]
 
 results = []
@@ -50,11 +60,14 @@ for method in METHOD:
     with open(filename, 'rb') as handle:
         datafull = pickle.load(handle)
         for data in datafull:
-            ah_time = interaction_time(data)
-            final_entropy = entropy(data)
-            belief_in_g3 = belief(data)
-            time_critical = critical_alignment(data)
-            results_method.append([ah_time, final_entropy, belief_in_g3, time_critical])
+            m1 = interaction_time(data)
+            m2 = score(data)
+            # m3 = entropy(data)
+            # m4 = belief(data)
+            m5 = efficiency(data)
+            m6 = criticality(data)
+            # m7 = total_time(data)
+            results_method.append([m1, m2, m5, m6])
 
     results.append(results_method)
 
