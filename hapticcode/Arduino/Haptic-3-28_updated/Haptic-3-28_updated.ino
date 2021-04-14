@@ -69,7 +69,7 @@ void recvWithEndMarker() {
 void process_command() {
     if (newData == true) {
         command = receivedChars[0];
-        power = (receivedChars[1]- '0') * 100;
+        power = (receivedChars[1]- '0') * 150;
         duration = receivedChars[2] - '0';
         if(command == 'A' ){ //All On
           all_on(power,duration);
@@ -119,7 +119,7 @@ void all_on(int p, int d){
     delay(d*1000);
 }
 void left(int p, int d){ 
-    tense(p, d);
+    tense(2*p, d);
     analogWrite(vibrotactors[4],p); 
     analogWrite(vibrotactors[5],p);
     delay(d*250);
@@ -160,7 +160,7 @@ void left(int p, int d){
     delay(d*250);
     analogWrite(vibrotactors[0],0); 
     analogWrite(vibrotactors[1],0);
-    relax(p, d);
+    relax(2*p, d);
 }
 void right(int p, int d){
     analogWrite(vibrotactors[0],p); 
@@ -169,7 +169,7 @@ void right(int p, int d){
     delay(d*1000);
 }
 void top(int p, int d){
-    tense(p, d);
+    tense(2*p, d);
     analogWrite(vibrotactors[0],p); 
     analogWrite(vibrotactors[5],p);
     delay(d*250);
@@ -210,7 +210,7 @@ void top(int p, int d){
     delay(d*250);
     analogWrite(vibrotactors[2],0); 
     analogWrite(vibrotactors[3],0);
-    relax(p, d);
+    relax(2*p, d);
 }
 void bottom(int p, int d){
     analogWrite(vibrotactors[2],p); 
@@ -218,7 +218,7 @@ void bottom(int p, int d){
     delay(d*1000);
 }
 void circle(int p, int d){
-    tense(p, d);
+    tense(2*p, d);
     analogWrite(vibrotactors[0],p);
     delay(d*100); 
     analogWrite(vibrotactors[0],0);
@@ -266,7 +266,7 @@ void circle(int p, int d){
     analogWrite(vibrotactors[5],p);
     delay(d*100);
     analogWrite(vibrotactors[5],0);
-    relax(p, d);
+    relax(2*p, d);
 }
 void striped(int p, int d){
   //TODO

@@ -97,7 +97,7 @@ def main():
     prior = np.asarray([0, 0, 0.5, 0.5])
     if prior_command == "B":
         next_prior = [0, 0, 0, 1]
-        BETA = 0.005
+        BETA = 0
     elif prior_command != "A" and prior_command != "C":
         print("[*] Please input a valid prior ('A'. 'B', or 'C')")
         sys.exit()
@@ -115,7 +115,7 @@ def main():
     start_timer = time.time()
     gui_update_timer = time.time()
     motion_start = random.uniform(1, 5)
-    set_prior_time = motion_start + random.uniform(4, 8)
+    set_prior_time = motion_start + random.uniform(3, 5)
     prior_timer = time.time()
     prior_timer_start = False
     time_controlled = 0
@@ -158,13 +158,18 @@ def main():
         if prior_command == "B" and not prior_timer_start and not np.array_equal(a_h, np.asarray([0]*3)):
             prior_timer_start = True
             prior_timer = time.time()
-        if prior_command == "B" and prior_timer_start and not np.array_equal(a_h, np.asarray([0]*3)):
+        elif prior_command == "B" and prior_timer_start and not np.array_equal(a_h, np.asarray([0]*3)):
             time_controlled += time.time() - prior_timer
+            prior_timer = time.time()
+        elif prior_command == "B" and prior_timer_start and np.array_equal(a_h, np.asarray([0]*3)):
             prior_timer = time.time()
         if mode and start_mode and (time.time() - start_time > 1):
             start_mode = False
             start_time = time.time()
             start_timer = time.time()
+            if prior_command == "C":
+                prior_timer_start = True
+                prior_timer = time.time()
             print("[*] Started")
             pickle.dump(True, open("game_start.pkl", "wb"))
         if grasp and (time.time() - start_time > 1):
@@ -188,7 +193,8 @@ def main():
             print(start_timer, prior_set)
             prior_set = True
             belief = prior
-        if prior_command == "B" and prior_timer_start and time_controlled > 1.5:
+        # print(time_controlled)
+        if prior_command == "B" and prior_timer_start and time_controlled > 3:
             belief = np.asarray(next_prior)
         elif belief[1] == 0 and prior_command == "C" and prior_timer_start and (time.time() - prior_timer > 24):
             belief[1] += 0.75
@@ -208,7 +214,11 @@ def main():
         C = sum([b*(utils.cost_to_go(s, a_r, goal_x) - utils.cost_to_go(s, a_star_x, goal_x)) for b, a_star_x, goal_x in zip(belief, a_star, G)])
         id = np.identity(3)
         U_set = [[-1*action_scale*id[:, i], action_scale*id[:, i]] for i in range(3)]
-        I_set = [utils.info_gain(BETA, U, s, G, belief) for U in U_set]
+        if prior_command == "B":
+            I_set = [utils.info_gain(0.05, U, s, G, belief) for U in U_set]
+        else:
+            I_set = [utils.info_gain(BETA, U, s, G, belief) for U in U_set]
+
         # print(C, np.argmax(I_set))
 
         if C > 0.011:
@@ -216,22 +226,19 @@ def main():
                 crit_var.set("Critical State Z!")
                 if not z_triggered and haptics_on:
                     print("Critical State Z")
-                    haptic.haptic_command(hapticconn, 'vertical', 3, 1)
+                    haptic.haptic_command(hapticconn, 'vertical', 1, 1)
                     z_triggered = True
             if np.argmax(I_set) == 1:
                 crit_var.set("Critical State Y!")
                 if not y_triggered and haptics_on:
                     print("Critical State Y")
-                    haptic.haptic_command(hapticconn, 'horizontal', 3, 1)
+                    haptic.haptic_command(hapticconn, 'horizontal', 1, 1)
                     y_triggered = True
         else:
             crit_var.set("")
 
         if start_mode or time.time() - start_timer < motion_start:
             a = [0]*6
-        elif not prior_timer_start and prior_command != "B":
-            prior_timer_start = True
-            prior_timer = time.time()
 
         if (time.time() - lastsend) > sendfreq:
             # print("[*] Sending Updated Coordinates and Beliefs")

@@ -208,19 +208,19 @@ def main():
                 crit_var.set("Critical State X!")
                 if not x_triggered and haptics_on:
                     print("Critical State X")
-                    haptic.haptic_command(hapticconn, 'horizontal', 3, 1)
+                    haptic.haptic_command(hapticconn, 'horizontal', 1, 1)
                     x_triggered = True
             if np.argmax(I_set) == 2:
                 crit_var.set("Critical State Z!")
                 if not z_triggered and haptics_on:
                     print("Critical State Z")
-                    haptic.haptic_command(hapticconn, 'vertical', 3, 1)
+                    haptic.haptic_command(hapticconn, 'vertical', 1, 1)
                     z_triggered = True
             elif np.argmax(I_set) > 2 and C > 0.15:
                 crit_var.set("Critical State Rotation!")
                 if not rot_triggered and haptics_on:
                     print("Critical State Rotation")
-                    haptic.haptic_command(hapticconn, 'circular', 3, 1)
+                    haptic.haptic_command(hapticconn, 'circular', 1, 1)
                     rot_triggered = True
         else:
             crit_var.set("")

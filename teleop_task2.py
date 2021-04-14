@@ -203,7 +203,7 @@ def main():
                 crit_var.set("Critical State X!")
                 if not y_triggered and haptics_on:
                     print("Critical State X")
-                    haptic.haptic_command(hapticconn, 'horizontal', 3, 1)
+                    haptic.haptic_command(hapticconn, 'horizontal', 1, 1)
                     y_triggered = True
         else:
             crit_var.set("")

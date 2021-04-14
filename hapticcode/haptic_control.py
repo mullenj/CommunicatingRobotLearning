@@ -37,32 +37,6 @@ def haptic_command(conn, command, PW, duration):
 def close(conn):
     conn.close()
 
-# def vert(conn):
-#     th = threading.Thread(target = vert_fun, args = (conn,))
-#     th.start()
-#     th.join()
-#
-# def vert_fun(conn):
-#     haptic_command(conn, 'top_on', 2, 1)
-#     time.sleep(1)
-#     haptic_command(conn, 'bottom_on', 2, 1)
-#     time.sleep(1)
-#     haptic_command(conn, 'top_on', 2, 1)
-#     time.sleep(1)
-#     haptic_command(conn, 'bottom_on', 2, 1)
-#     time.sleep(1)
-#     haptic_command(conn, 'top_on', 2, 1)
-#     time.sleep(1)
-#     haptic_command(conn, 'bottom_on', 2, 1)
-#     time.sleep(1)
-#     haptic_command(conn, 'top_on', 2, 1)
-#     time.sleep(1)
-#     haptic_command(conn, 'bottom_on', 2, 1)
-#     time.sleep(1)
-#     haptic_command(conn, 'top_on', 2, 1)
-#     time.sleep(1)
-#     haptic_command(conn, 'bottom_on', 2, 1)
-
 # Test Code
 # ---------
 def main():
@@ -73,7 +47,10 @@ def main():
         user_input = input(" >>  ")
         if user_input == 'Quit':
             break
-        haptic_command(conn, user_input, 3, 1)
+        if user_input == 'tense' or user_input == 'relax':
+            haptic_command(conn, user_input, 3, 1)
+        else:
+            haptic_command(conn, user_input, 1, 1)            
     close(conn)
 
 

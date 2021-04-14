@@ -160,14 +160,16 @@ def main():
                 crit_var.set("Critical State X!")
                 if not x_triggered and haptics_on:
                     print("Critical State X")
-                    haptic.haptic_command(hapticconn, 'horizontal', 3, 1)
+                    print("send haptic")
+                    haptic.haptic_command(hapticconn, 'horizontal', 1, 1)
+                    print("sent haptic")
                     x_triggered = True
                     haptic_timer = time.time()
             if C > 0.4 and np.argmax(I_set) == 1 and time.time() - haptic_timer > 5:
                 crit_var.set("Critical State Y!")
                 if not y_triggered and haptics_on:
                     print("Critical State Y")
-                    haptic.haptic_command(hapticconn, 'horizontal', 3, 1)
+                    haptic.haptic_command(hapticconn, 'horizontal', 1, 1)
                     y_triggered = True
         else:
             crit_var.set("")
