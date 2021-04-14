@@ -50,31 +50,60 @@ def total_time(data):
     return data["time"][-1]
 
 
-TASK = int(sys.argv[1])
+TASK = [1, 2, 3, 4, 5]
 METHOD = ["A", "B", "C", "D"]
 
-results = []
+results_all_mean = []
+results_all_std = []
 
-for method in METHOD:
+for task in TASK:
 
-    results_method = []
-    filename = "data/" + method + str(TASK) + ".pkl"
-    with open(filename, 'rb') as handle:
-        datafull = pickle.load(handle)
-        for data in datafull:
-            m1 = interaction_time(data)
-            m2 = score(data)
-            # m3 = entropy(data)
-            # m4 = belief(data)
-            m5 = efficiency(data)
-            m6 = criticality(data)
-            # m7 = total_time(data)
-            results_method.append([m1, m2, m5, m6])
-        results_method = np.asarray(results_method)
-    # results.append(np.mean(results_method, axis=0))       # averages results
-    results.append(results_method)                        # individual results
+    results_mean = []
+    results_std = []
+    N_users = None
 
-results = np.asarray(results)
-print("Rows are A, B, C, D")
-print("Columns are interaction time, score, efficiency, total criticality")
-print(results)
+    for method in METHOD:
+
+        results_method = []
+        filename = "data/" + method + str(task) + ".pkl"
+        with open(filename, 'rb') as handle:
+            datafull = pickle.load(handle)
+            N_users = len(datafull)
+            for data in datafull:
+                m1 = interaction_time(data)
+                m2 = efficiency(data)
+                m3 = score(data)
+                # m3 = entropy(data)
+                # m4 = belief(data)
+                # m6 = criticality(data)
+                # m7 = total_time(data)
+                results_method.append([m1, m2, m3])
+            results_method = np.asarray(results_method)
+        results_mean.append(np.mean(results_method, axis=0))       # averages results
+        results_std.append(np.std(results_method, axis=0))       # averages results
+
+    results_mean = np.asarray(results_mean)
+    results_std = np.asarray(results_std) / np.sqrt(N_users)
+    results_all_mean.append(results_mean)
+    results_all_std.append(results_std)
+    print(results_mean)
+
+
+x = [1, 2, 3, 4]
+for task in range(5):
+    plt.suptitle("Interaction Time", fontsize=14)
+    ax = plt.subplot(151 + task)
+    ax.bar(x, results_all_mean[task][:,0], yerr=results_all_std[task][:,0])
+plt.show()
+
+for task in range(5):
+    plt.suptitle("Teaching Efficiency", fontsize=14)
+    ax = plt.subplot(151 + task)
+    ax.bar(x, results_all_mean[task][:,1], yerr=results_all_std[task][:,1])
+plt.show()
+
+for task in range(5):
+    plt.suptitle("Distractor Score", fontsize=14)
+    ax = plt.subplot(151 + task)
+    ax.bar(x, results_all_mean[task][:,2], yerr=results_all_std[task][:,2])
+plt.show()
