@@ -71,8 +71,8 @@ for method in METHOD:
             # m7 = total_time(data)
             results_method.append([m1, m2, m5, m6])
         results_method = np.asarray(results_method)
-    results.append(np.mean(results_method, axis=0))       # averages results
-    # results.append(results_method)                        # individual results
+    # results.append(np.mean(results_method, axis=0))       # averages results
+    results.append(results_method)                        # individual results
 
 results = np.asarray(results)
 print("Rows are A, B, C, D")
