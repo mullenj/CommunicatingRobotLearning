@@ -24,7 +24,7 @@ def sort_data(data):
 
 
 # specify which user studies you want to process the data for
-USERS = [1, 2, 4, 5, 6, 7, 8]
+USERS = [1, 2, 4, 5, 6, 7, 8, 9]
 TASK = [1, 2, 3, 4, 5]
 METHOD = ["A", "B", "C", "D"]
 
