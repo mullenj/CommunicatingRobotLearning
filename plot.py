@@ -89,6 +89,7 @@ for task in TASK:
     print(results_mean)
 
 
+print("Number of users: ", N_users)
 x = [1, 2, 3, 4]
 for task in range(5):
     plt.suptitle("Interaction Time", fontsize=14)
