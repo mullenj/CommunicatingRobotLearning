@@ -90,7 +90,7 @@ def main():
     BETA = 0.05
     start_mode = True
     gripper_closed = False
-    gradient = 0.7
+    gradient = 0.8
 
     belief = [0.25, 0.25, 0.25, 0.25]
     prior_set = False
@@ -98,6 +98,7 @@ def main():
     if prior_command == "B":
         next_prior = [0, 0, 0, 1]
         BETA = 0
+        gradient = 1.0
     elif prior_command != "A" and prior_command != "C":
         print("[*] Please input a valid prior ('A'. 'B', or 'C')")
         sys.exit()
